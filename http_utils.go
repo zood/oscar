@@ -78,3 +78,11 @@ func sendInternalErr(w http.ResponseWriter, err error) {
 		log.Printf("%s:%d %v", file, line, err)
 	}
 }
+
+func sendSuccess(w http.ResponseWriter, response interface{}) {
+	if response == nil {
+		response = map[string]interface{}{}
+	}
+
+	sendResponse(w, response, http.StatusOK)
+}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -23,24 +22,25 @@ func main() {
 		"sqldsn",
 		"",
 		"DSN to SQL server e.g. username:password@protocol(address)/dbname?param=value")
+	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
 	flag.Parse()
 	Debug = *debug
 
 	err := initDB(*sqlDSN)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error initializing SQL db: %v", err)
+	}
+
+	err = initKVDB(*kvDBPath)
+	if err != nil {
+		log.Fatalf("Error initializing key-value db: %v", err)
 	}
 
 	r := mux.NewRouter()
-	installEndPoints(r)
+	alphaRouter := r.PathPrefix("/alpha").Subrouter()
+	installEndPoints(alphaRouter)
 
-	// log.Printf("random: %d", randombytesRandom())
-	// log.Printf("random: %d", randombytesRandom())
-	// log.Printf("random: %d", randombytesRandom())
-	// log.Printf("random: %d", randombytesRandom())
-	// log.Printf("random: %d", randombytesRandom())
-
-	playground()
+	// playground()
 
 	hostAddress := fmt.Sprintf(":%d", *port)
 	server := http.Server{
@@ -55,7 +55,12 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
+	r.Handle("/inboxes/{inbox_id}", NewRESTFunc(GetInboxMessageIDsHandler)).Methods("GET")
+
+	// r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("GET")
 	r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("POST")
+
+	// r.Handle("/sessions/challenge", NewRESTFunc(GetAuthenticationChallengeHandler)).Methods("GET")
 }
 
 func playground() {
@@ -63,25 +68,28 @@ func playground() {
 	// if err != nil {
 	// 	log.Fatalf("salt err: %v", err);
 	// }
-	key, err := hex.DecodeString("574c1aa36561e5e748a659f0ba8d4e2fb398512cb07d907579b0a7b1fbf2e50d")
-	if err != nil {
-		log.Fatalf("key err: %v", err)
-	}
-	cipherText, err := hex.DecodeString("c3f48480985a2b6f10b7703568807336a2b0a67eaa218f74c28b405be4c94f2b")
-	if err != nil {
-		log.Fatalf("cipherText err: %v", err)
-	}
-	nonce, err := hex.DecodeString("28861eac5b6eb77e3fa768ef5beae5663d88dc8663c32e2b")
-	if err != nil {
-		log.Fatalf("nonce: %v", err)
-	}
 
-	msg, ok := secretBoxOpenMessage(cipherText, nonce, key)
-	if !ok {
-		log.Printf("failed to open message")
-		return
-	}
-	log.Printf("msg: %v", string(msg))
+	/*
+		key, err := hex.DecodeString("574c1aa36561e5e748a659f0ba8d4e2fb398512cb07d907579b0a7b1fbf2e50d")
+		if err != nil {
+			log.Fatalf("key err: %v", err)
+		}
+		cipherText, err := hex.DecodeString("c3f48480985a2b6f10b7703568807336a2b0a67eaa218f74c28b405be4c94f2b")
+		if err != nil {
+			log.Fatalf("cipherText err: %v", err)
+		}
+		nonce, err := hex.DecodeString("28861eac5b6eb77e3fa768ef5beae5663d88dc8663c32e2b")
+		if err != nil {
+			log.Fatalf("nonce: %v", err)
+		}
+
+		msg, ok := symmetricKeyDecrypt(cipherText, nonce, key)
+		if !ok {
+			log.Printf("failed to open message")
+			return
+		}
+		log.Printf("msg: %v", string(msg))
+	*/
 
 	// key stretching the password
 	/*

@@ -67,7 +67,7 @@ func generateKeyPair() (keyPair, error) {
 	return kp, nil
 }
 
-func publicKeyEncryptMessage(msg, receiverPubKey, senderSecretKey []byte) (cipherText, nonce []byte, err error) {
+func publicKeyEncrypt(msg, receiverPubKey, senderSecretKey []byte) (cipherText, nonce []byte, err error) {
 	cipherText = make([]byte, boxMACSize+len(msg))
 	nonce = make([]byte, boxNonceSize)
 	crand.Read(nonce)
@@ -85,7 +85,7 @@ func publicKeyEncryptMessage(msg, receiverPubKey, senderSecretKey []byte) (ciphe
 	return
 }
 
-func publicKeyDecryptMessage(cipherText, nonce, senderPublicKey, receiverSecretKey []byte) ([]byte, bool) {
+func publicKeyDecrypt(cipherText, nonce, senderPublicKey, receiverSecretKey []byte) ([]byte, bool) {
 	msg := make([]byte, len(cipherText)-boxMACSize)
 	result := C.crypto_box_open_easy(
 		(*C.uchar)(&msg[0]),
@@ -102,7 +102,7 @@ func publicKeyDecryptMessage(cipherText, nonce, senderPublicKey, receiverSecretK
 	return msg, true
 }
 
-func secretBoxMessage(msg, key []byte) (cipherText, nonce []byte, err error) {
+func symmetricKeyEncrypt(msg, key []byte) (cipherText, nonce []byte, err error) {
 	cipherText = make([]byte, len(msg)+secretBoxMACSize)
 	nonce = make([]byte, secretBoxNonceSize)
 	crand.Read(nonce)
@@ -120,7 +120,7 @@ func secretBoxMessage(msg, key []byte) (cipherText, nonce []byte, err error) {
 	return
 }
 
-func secretBoxOpenMessage(cipherText, nonce, key []byte) ([]byte, bool) {
+func symmetricKeyDecrypt(cipherText, nonce, key []byte) ([]byte, bool) {
 	msg := make([]byte, len(cipherText)-secretBoxMACSize)
 	result := C.crypto_secretbox_open_easy(
 		(*C.uchar)(&msg[0]),
@@ -133,17 +133,3 @@ func secretBoxOpenMessage(cipherText, nonce, key []byte) ([]byte, bool) {
 	}
 	return msg, true
 }
-
-/*
-func sealMessage(msg, additionalData, nonce, key []byte) ([]byte, error) {
-	cipherText := make([]byte, len(msg)+chacha20poly1305IETFABytes)
-	result := C.crypto_aead_chacha20poly1305_ietf_encrypt(
-		(*C.uchar)(&cipherText[0]), C.ulonglong(len(cipherText)),
-		(*C.uchar)(&msg[0]), C.ulonglong(len(msg)),
-		(*C.uchar)(&additionalData[0]), C.ulonglong(len(additionalData)),
-		nil,
-		(*C.uchar)(&nonce[0]),
-		(*C.uchar)(&key[0]))
-	return nil, nil
-}
-*/
