@@ -23,6 +23,8 @@ const (
 	ErrorInvalidWrappedSymmetricKeyNonce         = 8
 	ErrorInvalidPasswordSalt                     = 9
 	ErrorUsernameNotAvailable                    = 10
+	ErrorNotFound                                = 11
+	ErrorInsufficientPermission                  = 12
 )
 
 type serverError struct {
@@ -36,6 +38,10 @@ func (err serverError) Error() string {
 
 func (err serverError) String() string {
 	return fmt.Sprintf("%s (%d)", err.message, err.code)
+}
+
+func newInternalErr() *serverError {
+	return &serverError{code: ErrorInternal, message: "Internal server error"}
 }
 
 func logErr(err error) {

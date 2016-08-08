@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 )
 
@@ -55,15 +56,27 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
-	r.Handle("/inboxes/{inbox_id}", NewRESTFunc(GetInboxMessageIDsHandler)).Methods("GET")
-
 	// r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("GET")
 	r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("POST")
+
+	r.Handle("/users/{public_id}/messages", NewRESTFunc(GetUserMessagesHandler)).Methods("GET")
 
 	// r.Handle("/sessions/challenge", NewRESTFunc(GetAuthenticationChallengeHandler)).Methods("GET")
 }
 
 func playground() {
+	kvdb().Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(userIDsBucketName)
+		bucket.Put([]byte("gabble gabble"), []byte("goo goo"))
+		return nil
+	})
+
+	kvdb().View(func(tx *bolt.Tx) error {
+		val := tx.Bucket(userIDsBucketName).Get([]byte("gabble sgabble"))
+		log.Printf("gabble value: %s", val)
+		return nil
+	})
+
 	// salt, err := hex.DecodeString()
 	// if err != nil {
 	// 	log.Fatalf("salt err: %v", err);

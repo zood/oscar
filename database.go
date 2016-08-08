@@ -12,6 +12,12 @@ import (
 var gSQLDatabase *sql.DB
 var gSQLXDatabase *sqlx.DB
 
+/*
+DELETE FROM sessions;
+DELETE FROM messages;
+DELETE FROM users;
+*/
+
 func initDB(sqlDSN string) error {
 	if sqlDSN == "" {
 		return errors.New("sql dsn is empty")
