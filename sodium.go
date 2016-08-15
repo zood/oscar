@@ -29,6 +29,8 @@ const boxMACSize = C.crypto_box_MACBYTES
 const secretBoxMACSize = C.crypto_secretbox_MACBYTES
 const secretBoxNonceSize = C.crypto_secretbox_NONCEBYTES
 const secretBoxKeySize = C.crypto_secretbox_KEYBYTES
+const argon2iOpsLimitInteractive = C.crypto_pwhash_argon2i_OPSLIMIT_INTERACTIVE
+const argon2iMemLimitInteractive = C.crypto_pwhash_argon2i_MEMLIMIT_INTERACTIVE
 
 func (kp keyPair) String() string {
 	return fmt.Sprintf("public: %s\nsecret: %s",
@@ -45,9 +47,9 @@ func keyFromPassword(keySize int, pw string, salt []byte) ([]byte, error) {
 		pwc,
 		C.ulonglong(len(pw)),
 		(*C.uchar)(&salt[0]),
-		C.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-		C.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-		C.crypto_pwhash_ALG_DEFAULT)
+		argon2iOpsLimitInteractive,
+		argon2iMemLimitInteractive,
+		C.crypto_pwhash_ALG_ARGON2I13)
 	if result != 0 {
 		return nil, errors.New("out of memory")
 	}

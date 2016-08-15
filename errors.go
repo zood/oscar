@@ -25,6 +25,9 @@ const (
 	ErrorUsernameNotAvailable                    = 10
 	ErrorNotFound                                = 11
 	ErrorInsufficientPermission                  = 12
+	ErrorArgon2iOpsLimitTooLow                   = 13
+	ErrorArgon2iMemLimitTooLow                   = 14
+	ErrorInvalidAccessToken                      = 15
 )
 
 type serverError struct {

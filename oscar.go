@@ -56,10 +56,13 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
-	// r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("GET")
+	r.Handle("/users", NewRESTFunc(SearchUsersHandler)).Methods("GET")
 	r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("POST")
+	r.Handle("/users/{public_id}/messages", NewRESTFunc(SendMessageToUserHandler)).Methods("POST")
 
-	r.Handle("/users/{public_id}/messages", NewRESTFunc(GetUserMessagesHandler)).Methods("GET")
+	// r.Handle("/users/{public_id}/messages", NewRESTFunc(GetUserMessagesHandler)).Methods("GET")
+
+	r.Handle("/messages", NewRESTFunc(GetMessagesHandler)).Methods("GET")
 
 	// r.Handle("/sessions/challenge", NewRESTFunc(GetAuthenticationChallengeHandler)).Methods("GET")
 }

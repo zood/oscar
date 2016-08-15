@@ -8,6 +8,7 @@ import (
 
 var gKVDB *bolt.DB
 var userIDsBucketName = []byte("user_ids")
+var publicIDsBucketName = []byte("public_ids")
 
 func initKVDB(dbPath string) error {
 	var err error
@@ -21,7 +22,11 @@ func initKVDB(dbPath string) error {
 	}
 	_, err = tx.CreateBucketIfNotExists(userIDsBucketName)
 	if err != nil {
-		return fmt.Errorf("Error creating '%s' bucket: %v", string(userIDsBucketName), err)
+		return fmt.Errorf("Error creating '%s' bucket: %v", userIDsBucketName, err)
+	}
+	_, err = tx.CreateBucketIfNotExists(publicIDsBucketName)
+	if err != nil {
+		return fmt.Errorf("Error creating '%s' bucket: %v", publicIDsBucketName, err)
 	}
 	err = tx.Commit()
 	if err != nil {

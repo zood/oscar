@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/boltdb/bolt"
@@ -14,22 +13,16 @@ import (
 
 // User ...
 type User struct {
-	ID                       int
-	Username                 string
-	PasswordSalt             []byte
-	PublicKey                []byte
-	WrappedSecretKey         []byte
-	WrappedSecretKeyNonce    []byte
-	WrappedSymmetricKey      []byte
-	WrappedSymmetricKeyNonce []byte
-}
-
-// UserMessage ...
-type UserMessage struct {
-	ID          int    `db:"id"`
-	RecipientID int    `db:"recipient_id"`
-	Data        []byte `db:"data"`
-	SentDate    int64  `db:"sent_date"`
+	ID                          int
+	Username                    string
+	PasswordSalt                []byte
+	PasswordHashOperationsLimit uint64
+	PasswordHashMemoryLimit     uint64
+	PublicKey                   []byte
+	WrappedSecretKey            []byte
+	WrappedSecretKeyNonce       []byte
+	WrappedSymmetricKey         []byte
+	WrappedSymmetricKeyNonce    []byte
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -52,7 +45,13 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 
-	return bytesToInt64(pubID), true
+	id := bytesToInt64(idBytes)
+	if id < 0 {
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr))
+		return 0, false
+	}
+
+	return id, true
 }
 
 func userIDFromPubID(b []byte) int64 {
@@ -60,27 +59,28 @@ func userIDFromPubID(b []byte) int64 {
 	if err != nil {
 		panic(err)
 	}
+	defer tx.Rollback()
 	userIDBytes := tx.Bucket(userIDsBucketName).Get(b)
-	tx.Commit()
 	return bytesToInt64(userIDBytes)
 }
 
 // CreateUserHandler handles POST /users
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	body := struct {
-		Username                 string `json:"username"`
-		PasswordSalt             string `json:"password_salt"`
-		PublicKey                string `json:"public_key"`
-		WrappedSecretKey         string `json:"wrapped_secret_key"`
-		WrappedSecretKeyNonce    string `json:"wrapped_secret_key_nonce"`
-		WrappedSymmetricKey      string `json:"wrapped_symmetric_key"`
-		WrappedSymmetricKeyNonce string `json:"wrapped_symmetric_key_nonce"`
+		Username                    string `json:"username"`
+		PasswordSalt                string `json:"password_salt"`
+		PasswordHashOperationsLimit uint64 `json:"password_hash_operations_limit"`
+		PasswordHashMemoryLimit     uint64 `json:"password_hash_memory_limit"`
+		PublicKey                   string `json:"public_key"`
+		WrappedSecretKey            string `json:"wrapped_secret_key"`
+		WrappedSecretKeyNonce       string `json:"wrapped_secret_key_nonce"`
+		WrappedSymmetricKey         string `json:"wrapped_symmetric_key"`
+		WrappedSymmetricKeyNonce    string `json:"wrapped_symmetric_key_nonce"`
 	}{}
 
 	dec := json.NewDecoder(r.Body)
 	err := dec.Decode(&body)
 	if err != nil {
-		log.Printf("can't parse body: " + err.Error())
 		sendBadReq(w, "Unable to parse POST body: "+err.Error())
 		return
 	}
@@ -91,6 +91,9 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		sendBadReq(w, "unable to decode 'password' salt' field from base64: "+err.Error())
 		return
 	}
+	user.PasswordHashOperationsLimit = body.PasswordHashOperationsLimit
+	user.PasswordHashMemoryLimit = body.PasswordHashMemoryLimit
+
 	user.PublicKey, err = hex.DecodeString(body.PublicKey)
 	if err != nil {
 		sendBadReq(w, "unable to decode 'public_key' field from base64: "+err.Error())
@@ -117,7 +120,6 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("about to create user")
 	pubID, sErr := createUser(user)
 	if sErr != nil {
 		if sErr.code == ErrorInternal {
@@ -127,17 +129,14 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	log.Printf("about to conver id")
 	userID := userIDFromPubID(pubID)
 
-	log.Printf("about to create new access token")
 	token, err := newAccessToken(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
-	log.Printf("about to send success")
 	sendSuccess(w, map[string]interface{}{
 		"id":           hex.EncodeToString(pubID),
 		"access_token": token,
@@ -150,6 +149,12 @@ func createUser(user User) ([]byte, *serverError) {
 	}
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: ErrorInvalidPasswordSalt, message: "Invalid password salt"}
+	}
+	if user.PasswordHashOperationsLimit < argon2iOpsLimitInteractive {
+		return nil, &serverError{code: ErrorArgon2iOpsLimitTooLow, message: "Password hash ops limit is too low"}
+	}
+	if user.PasswordHashMemoryLimit < argon2iMemLimitInteractive {
+		return nil, &serverError{code: ErrorArgon2iMemLimitTooLow, message: "Password hash mem limit is too low"}
 	}
 	if user.PublicKey == nil || len(user.PublicKey) != publicKeySize {
 		return nil, &serverError{code: ErrorInvalidPublicKey, message: "Invalid public key"}
@@ -178,13 +183,15 @@ func createUser(user User) ([]byte, *serverError) {
 	insertSQL := `
 	INSERT INTO users (	username,
 						password_salt,
+						password_hash_operations_limit,
+						password_hash_memory_limit,
 		 				public_key,
 						wrapped_secret_key,
 						wrapped_secret_key_nonce,
 						wrapped_symmetric_key,
 						wrapped_symmetric_key_nonce)
-						VALUES (?, ?, ?, ?, ?, ?, ?)`
-	result, err := db().Exec(insertSQL, user.Username, user.PasswordSalt, user.PublicKey, user.WrappedSecretKey, user.WrappedSecretKeyNonce, user.WrappedSymmetricKey, user.WrappedSymmetricKeyNonce)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	result, err := db().Exec(insertSQL, user.Username, user.PasswordSalt, user.PasswordHashOperationsLimit, user.PasswordHashMemoryLimit, user.PublicKey, user.WrappedSecretKey, user.WrappedSecretKeyNonce, user.WrappedSymmetricKey, user.WrappedSymmetricKeyNonce)
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
@@ -204,10 +211,10 @@ func createUser(user User) ([]byte, *serverError) {
 		logErr(err)
 		return nil, newInternalErr()
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(userIDsBucketName)
 
 	for idExists {
-		log.Printf("about to create pub id")
 		_, err = crand.Read(pubID)
 		if err != nil {
 			logErr(err)
@@ -220,7 +227,6 @@ func createUser(user User) ([]byte, *serverError) {
 			// someone already has this id, let's try again
 			continue
 		}
-		log.Printf("finished checking bucket")
 		idExists = false
 
 		err = bucket.Put(pubID, int64ToBytes(id))
@@ -228,55 +234,18 @@ func createUser(user User) ([]byte, *serverError) {
 			logErr(err)
 			return nil, newInternalErr()
 		}
-		log.Printf("finished putting bucket")
 		err = tx.Commit()
 		if err != nil {
 			logErr(err)
 			return nil, newInternalErr()
 		}
-		log.Printf("finished committing bucket")
 	}
 
 	return pubID, nil
 }
 
-// GetUserMessagesHandler handles GET /users/{user_id}/messages
-func GetUserMessagesHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseUserID(w, r)
-	if !ok {
-		return
-	}
-
-	ok, sessionUserID := verifySession(w, r)
-	if !ok {
-		return
-	}
-
-	if sessionUserID != userID {
-		sendErr(w, "insufficient permissions", http.StatusForbidden, ErrorInsufficientPermission)
-		return
-	}
-
-	selectSQL := `
-	SELECT id, recipient_id, data, sent_date FROM messages WHERE recipient_id=?`
-	rows, err := db().Queryx(selectSQL, userID)
-	if err != nil {
-		logErr(err)
-		sendInternalErr(w, err)
-		return
-	}
-
-	messages := make([]UserMessage, 0, 0)
-	for rows.Next() {
-		msg := UserMessage{}
-		err = rows.StructScan(&msg)
-		if err != nil {
-			logErr(err)
-			sendInternalErr(w, err)
-			return
-		}
-		messages = append(messages, msg)
-	}
-
-	sendSuccess(w, messages)
+// SearchUsersHandler handles GET /users
+func SearchUsersHandler(w http.ResponseWriter, r *http.Request) {
+	// username := r.URL.Query().Get("username")
+	// if username !=
 }

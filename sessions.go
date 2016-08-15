@@ -27,6 +27,7 @@ func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, 
 	token := strings.ToLower(strings.TrimSpace(accessToken))
 	if token == "" {
 		authenticated = false
+		sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
 		return
 	}
 
@@ -40,6 +41,9 @@ func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, 
 	// check if this was a simple 'not found' or a more serious error
 	if err != sql.ErrNoRows {
 		logErr(err)
+		sendInternalErr(w, err)
+	} else {
+		sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
 	}
 
 	return false, 0
