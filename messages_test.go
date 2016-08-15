@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -17,6 +18,13 @@ var testMessage = Message{
 	SentDate:    time.Now().Unix(),
 }
 var marshaledMessage []byte
+
+func init() {
+	testMessage.CipherText = make([]byte, 128)
+	crand.Read(testMessage.CipherText)
+	testMessage.Nonce = make([]byte, 128)
+	crand.Read(testMessage.Nonce)
+}
 
 func TestMessageMarshaling(t *testing.T) {
 	var err error
@@ -37,12 +45,6 @@ func TestMessageUnmarshaling(t *testing.T) {
 
 	if testMessage.ID != msg.ID {
 		t.Fatal("ids not equal")
-	}
-	if testMessage.RecipientID != msg.RecipientID {
-		t.Fatal("recipient id not equal")
-	}
-	if testMessage.SenderID != msg.SenderID {
-		t.Fatal("sender id not equal")
 	}
 	if !bytes.Equal(testMessage.CipherText, msg.CipherText) {
 		t.Fatalf("cipher text not equal %v\n%v", testMessage.CipherText, msg.CipherText)

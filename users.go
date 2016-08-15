@@ -2,6 +2,7 @@ package main
 
 import (
 	crand "crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,14 +16,14 @@ import (
 type User struct {
 	ID                          int
 	Username                    string
-	PasswordSalt                []byte
-	PasswordHashOperationsLimit uint64
-	PasswordHashMemoryLimit     uint64
-	PublicKey                   []byte
-	WrappedSecretKey            []byte
-	WrappedSecretKeyNonce       []byte
-	WrappedSymmetricKey         []byte
-	WrappedSymmetricKeyNonce    []byte
+	PasswordSalt                encodableBytes `json:"password_salt"`
+	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"`
+	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"`
+	PublicKey                   encodableBytes `json:"public_key"`
+	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"`
+	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"`
+	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"`
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -64,61 +65,75 @@ func userIDFromPubID(b []byte) int64 {
 	return bytesToInt64(userIDBytes)
 }
 
+func pubIDFromUserID(id int64) []byte {
+	tx, err := kvdb().Begin(false)
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+	pubIDBytes := tx.Bucket(publicIDsBucketName).Get(int64ToBytes(id))
+	return pubIDBytes
+}
+
 // CreateUserHandler handles POST /users
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
-	body := struct {
-		Username                    string `json:"username"`
-		PasswordSalt                string `json:"password_salt"`
-		PasswordHashOperationsLimit uint64 `json:"password_hash_operations_limit"`
-		PasswordHashMemoryLimit     uint64 `json:"password_hash_memory_limit"`
-		PublicKey                   string `json:"public_key"`
-		WrappedSecretKey            string `json:"wrapped_secret_key"`
-		WrappedSecretKeyNonce       string `json:"wrapped_secret_key_nonce"`
-		WrappedSymmetricKey         string `json:"wrapped_symmetric_key"`
-		WrappedSymmetricKeyNonce    string `json:"wrapped_symmetric_key_nonce"`
-	}{}
+	// body := struct {
+	// 	Username                    string         `json:"username"`
+	// 	PasswordSalt                encodableBytes `json:"password_salt"`
+	// 	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"`
+	// 	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"`
+	// 	PublicKey                   encodableBytes `json:"public_key"`
+	// 	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"`
+	// 	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"`
+	// 	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"`
+	// 	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"`
+	// }{}
+
+	user := User{}
 
 	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&body)
+	err := dec.Decode(&user)
 	if err != nil {
 		sendBadReq(w, "Unable to parse POST body: "+err.Error())
 		return
 	}
 
-	user := User{Username: body.Username}
-	user.PasswordSalt, err = hex.DecodeString(body.PasswordSalt)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'password' salt' field from base64: "+err.Error())
-		return
-	}
-	user.PasswordHashOperationsLimit = body.PasswordHashOperationsLimit
-	user.PasswordHashMemoryLimit = body.PasswordHashMemoryLimit
+	// user := User{Username: body.Username}
+	// user.PasswordSalt, err = hex.DecodeString(body.PasswordSalt)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'password' salt' field from base64: "+err.Error())
+	// 	return
+	// }
+	// user.PasswordHashOperationsLimit = body.PasswordHashOperationsLimit
+	// user.PasswordHashMemoryLimit = body.PasswordHashMemoryLimit
+	//
+	// user.PublicKey, err = hex.DecodeString(body.PublicKey)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'public_key' field from base64: "+err.Error())
+	// 	return
+	// }
+	// user.WrappedSecretKey, err = hex.DecodeString(body.WrappedSecretKey)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'wrapped_secret_key' field from base64: "+err.Error())
+	// 	return
+	// }
+	// user.WrappedSecretKeyNonce, err = hex.DecodeString(body.WrappedSecretKeyNonce)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'wrapped_secret_key_nonce' field from base64: "+err.Error())
+	// 	return
+	// }
+	// user.WrappedSymmetricKey, err = hex.DecodeString(body.WrappedSymmetricKey)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'wrapped_symmetric_key' field from base64: "+err.Error())
+	// 	return
+	// }
+	// user.WrappedSymmetricKeyNonce, err = hex.DecodeString(body.WrappedSymmetricKeyNonce)
+	// if err != nil {
+	// 	sendBadReq(w, "unable to decode 'wrapped_symmetric_key_nonce' field from base64: "+err.Error())
+	// 	return
+	// }
 
-	user.PublicKey, err = hex.DecodeString(body.PublicKey)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'public_key' field from base64: "+err.Error())
-		return
-	}
-	user.WrappedSecretKey, err = hex.DecodeString(body.WrappedSecretKey)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'wrapped_secret_key' field from base64: "+err.Error())
-		return
-	}
-	user.WrappedSecretKeyNonce, err = hex.DecodeString(body.WrappedSecretKeyNonce)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'wrapped_secret_key_nonce' field from base64: "+err.Error())
-		return
-	}
-	user.WrappedSymmetricKey, err = hex.DecodeString(body.WrappedSymmetricKey)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'wrapped_symmetric_key' field from base64: "+err.Error())
-		return
-	}
-	user.WrappedSymmetricKeyNonce, err = hex.DecodeString(body.WrappedSymmetricKeyNonce)
-	if err != nil {
-		sendBadReq(w, "unable to decode 'wrapped_symmetric_key_nonce' field from base64: "+err.Error())
-		return
-	}
+	// log.Printf("decoded user to %+v", user)
 
 	pubID, sErr := createUser(user)
 	if sErr != nil {
@@ -138,7 +153,7 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(w, map[string]interface{}{
-		"id":           hex.EncodeToString(pubID),
+		"id":           base64.StdEncoding.EncodeToString(pubID),
 		"access_token": token,
 	})
 }
@@ -157,7 +172,10 @@ func createUser(user User) ([]byte, *serverError) {
 		return nil, &serverError{code: ErrorArgon2iMemLimitTooLow, message: "Password hash mem limit is too low"}
 	}
 	if user.PublicKey == nil || len(user.PublicKey) != publicKeySize {
-		return nil, &serverError{code: ErrorInvalidPublicKey, message: "Invalid public key"}
+		return nil, &serverError{
+			code:    ErrorInvalidPublicKey,
+			message: fmt.Sprintf("Invalid public key. Expected %d bytes. Found %d.", publicKeySize, len(user.PublicKey)),
+		}
 	}
 	if user.WrappedSecretKey == nil || len(user.WrappedSecretKey) == 0 {
 		return nil, &serverError{code: ErrorInvalidWrappedSecretKey, message: "Invalid wrapped secret key"}
@@ -191,7 +209,17 @@ func createUser(user User) ([]byte, *serverError) {
 						wrapped_symmetric_key,
 						wrapped_symmetric_key_nonce)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	result, err := db().Exec(insertSQL, user.Username, user.PasswordSalt, user.PasswordHashOperationsLimit, user.PasswordHashMemoryLimit, user.PublicKey, user.WrappedSecretKey, user.WrappedSecretKeyNonce, user.WrappedSymmetricKey, user.WrappedSymmetricKeyNonce)
+	result, err := db().Exec(
+		insertSQL,
+		user.Username,
+		user.PasswordSalt,
+		user.PasswordHashOperationsLimit,
+		user.PasswordHashMemoryLimit,
+		user.PublicKey,
+		user.WrappedSecretKey,
+		user.WrappedSecretKeyNonce,
+		user.WrappedSymmetricKey,
+		user.WrappedSymmetricKeyNonce)
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
@@ -212,7 +240,8 @@ func createUser(user User) ([]byte, *serverError) {
 		return nil, newInternalErr()
 	}
 	defer tx.Rollback()
-	bucket := tx.Bucket(userIDsBucketName)
+	uidsBucket := tx.Bucket(userIDsBucketName)
+	pubIDsBucket := tx.Bucket(publicIDsBucketName)
 
 	for idExists {
 		_, err = crand.Read(pubID)
@@ -222,14 +251,19 @@ func createUser(user User) ([]byte, *serverError) {
 		}
 
 		// check if the id already exists
-		val := bucket.Get(pubID)
+		val := uidsBucket.Get(pubID)
 		if val != nil {
 			// someone already has this id, let's try again
 			continue
 		}
 		idExists = false
 
-		err = bucket.Put(pubID, int64ToBytes(id))
+		err = uidsBucket.Put(pubID, int64ToBytes(id))
+		if err != nil {
+			logErr(err)
+			return nil, newInternalErr()
+		}
+		err = pubIDsBucket.Put(int64ToBytes(id), pubID)
 		if err != nil {
 			logErr(err)
 			return nil, newInternalErr()
