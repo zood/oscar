@@ -2,28 +2,33 @@ package main
 
 import (
 	crand "crypto/rand"
-	"encoding/base64"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 )
 
+var validUsernamePattern = regexp.MustCompile(`^[a-z0-9]{5,}$`)
+
 // User ...
 type User struct {
-	ID                          int
-	Username                    string
-	PasswordSalt                encodableBytes `json:"password_salt"`
-	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"`
-	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"`
-	PublicKey                   encodableBytes `json:"public_key"`
-	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"`
-	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"`
-	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"`
-	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"`
+	ID                          int            `json:"-"db:"id"`
+	PublicID                    encodableBytes `json:"id"`
+	Username                    string         `json:"username"db:"username"`
+	PasswordSalt                encodableBytes `json:"password_salt"db:"password_salt"`
+	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"db:"password_hash_operations_limit"`
+	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"db:"password_hash_memory_limit"`
+	PublicKey                   encodableBytes `json:"public_key"db:"public_key"`
+	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"db:"wrapped_secret_key"`
+	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"db:"wrapped_secret_key_nonce"`
+	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"db:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"db:"wrapped_symmetric_key_nonce"`
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -75,65 +80,14 @@ func pubIDFromUserID(id int64) []byte {
 	return pubIDBytes
 }
 
-// CreateUserHandler handles POST /users
-func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
-	// body := struct {
-	// 	Username                    string         `json:"username"`
-	// 	PasswordSalt                encodableBytes `json:"password_salt"`
-	// 	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"`
-	// 	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"`
-	// 	PublicKey                   encodableBytes `json:"public_key"`
-	// 	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"`
-	// 	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"`
-	// 	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"`
-	// 	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"`
-	// }{}
-
+// createUserHandler handles POST /users
+func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	user := User{}
-
-	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&user)
+	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		sendBadReq(w, "Unable to parse POST body: "+err.Error())
 		return
 	}
-
-	// user := User{Username: body.Username}
-	// user.PasswordSalt, err = hex.DecodeString(body.PasswordSalt)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'password' salt' field from base64: "+err.Error())
-	// 	return
-	// }
-	// user.PasswordHashOperationsLimit = body.PasswordHashOperationsLimit
-	// user.PasswordHashMemoryLimit = body.PasswordHashMemoryLimit
-	//
-	// user.PublicKey, err = hex.DecodeString(body.PublicKey)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'public_key' field from base64: "+err.Error())
-	// 	return
-	// }
-	// user.WrappedSecretKey, err = hex.DecodeString(body.WrappedSecretKey)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'wrapped_secret_key' field from base64: "+err.Error())
-	// 	return
-	// }
-	// user.WrappedSecretKeyNonce, err = hex.DecodeString(body.WrappedSecretKeyNonce)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'wrapped_secret_key_nonce' field from base64: "+err.Error())
-	// 	return
-	// }
-	// user.WrappedSymmetricKey, err = hex.DecodeString(body.WrappedSymmetricKey)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'wrapped_symmetric_key' field from base64: "+err.Error())
-	// 	return
-	// }
-	// user.WrappedSymmetricKeyNonce, err = hex.DecodeString(body.WrappedSymmetricKeyNonce)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'wrapped_symmetric_key_nonce' field from base64: "+err.Error())
-	// 	return
-	// }
-
-	// log.Printf("decoded user to %+v", user)
 
 	pubID, sErr := createUser(user)
 	if sErr != nil {
@@ -152,15 +106,16 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendSuccess(w, map[string]interface{}{
-		"id":           base64.StdEncoding.EncodeToString(pubID),
-		"access_token": token,
-	})
+	sendSuccess(w, loginResponse{ID: pubID, AccessToken: token})
 }
 
 func createUser(user User) ([]byte, *serverError) {
+	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: ErrorInvalidUsername, message: "Username can not be empty"}
+	}
+	if !validUsernamePattern.MatchString(user.Username) {
+		return nil, &serverError{code: ErrorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain letters (a-z) or numbers (0-9)."}
 	}
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: ErrorInvalidPasswordSalt, message: "Invalid password salt"}
@@ -278,8 +233,50 @@ func createUser(user User) ([]byte, *serverError) {
 	return pubID, nil
 }
 
-// SearchUsersHandler handles GET /users
-func SearchUsersHandler(w http.ResponseWriter, r *http.Request) {
-	// username := r.URL.Query().Get("username")
-	// if username !=
+// getUserPublicKeyHandler handles GET /users/{public_id}/public-key
+func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
+	ok, _ := verifySession(w, r)
+	if !ok {
+		return
+	}
+
+	userID, ok := parseUserID(w, r)
+	if !ok {
+		return
+	}
+
+	selectSQL := `SELECT public_key FROM users WHERE id=?`
+	var pubKey []byte
+	err := db().QueryRow(selectSQL, userID).Scan(&pubKey)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
+
+	resp := struct {
+		PublicKey encodableBytes `json:"public_key"`
+	}{PublicKey: pubKey}
+
+	sendSuccess(w, resp)
+}
+
+// searchUsersHandler handles GET /users
+func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	username = strings.TrimSpace(username)
+	username = strings.ToLower(username)
+
+	var foundID int64
+	err := db().QueryRow("SELECT id FROM users WHERE username=?", username).Scan(&foundID)
+	switch err {
+	case nil:
+		pubID := pubIDFromUserID(foundID)
+		sendSuccess(w, struct {
+			ID encodableBytes `json:"id"`
+		}{ID: pubID})
+	case sql.ErrNoRows:
+		sendErr(w, "user not found", http.StatusNotFound, ErrorUserNotFound)
+	default:
+		sendInternalErr(w, err)
+	}
 }

@@ -56,16 +56,16 @@ type Message struct {
 	SentDate          int64          `db:"sent_date"json:"sent_date"`
 }
 
-// SendMessageToUserHandler handles POST /users/{public_id}/messages
-func SendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
-	// make sure this user exists
-	userID, ok := parseUserID(w, r)
+// sendMessageToUserHandler handles POST /users/{public_id}/messages
+func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
+	// make sure the caller is legitimate
+	ok, sessionUserID := verifySession(w, r)
 	if !ok {
 		return
 	}
 
-	// make sure the caller is legitimate
-	ok, sessionUserID := verifySession(w, r)
+	// make sure this user exists
+	userID, ok := parseUserID(w, r)
 	if !ok {
 		return
 	}
@@ -86,17 +86,6 @@ func SendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// cipherText, err := hex.DecodeString(body.CipherText)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'cipher_text' from hexadecimal encoding: "+err.Error())
-	// 	return
-	// }
-	// nonce, err := hex.DecodeString(body.Nonce)
-	// if err != nil {
-	// 	sendBadReq(w, "unable to decode 'nonce' from hexadecimal encoding: "+err.Error())
-	// 	return
-	// }
-
 	insertSQL := `
     INSERT INTO messages (recipient_id, sender_id, cipher_text, nonce, sent_date) VALUES (?, ?, ?, ?, ?)`
 	_, err = db().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
@@ -108,8 +97,8 @@ func SendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-// GetMessagesHandler handles GET /messages
-func GetMessagesHandler(w http.ResponseWriter, r *http.Request) {
+// getMessagesHandler handles GET /messages
+func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	ok, sessionUserID := verifySession(w, r)
 	if !ok {
 		return

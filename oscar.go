@@ -1,13 +1,14 @@
 package main
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 )
 
@@ -56,107 +57,53 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
-	r.Handle("/users", NewRESTFunc(SearchUsersHandler)).Methods("GET")
-	r.Handle("/users", NewRESTFunc(CreateUserHandler)).Methods("POST")
-	r.Handle("/users/{public_id}/messages", NewRESTFunc(SendMessageToUserHandler)).Methods("POST")
+	r.Handle("/users", NewRESTFunc(searchUsersHandler)).Methods("GET")
+	r.Handle("/users", NewRESTFunc(createUserHandler)).Methods("POST")
+	r.Handle("/users/{public_id}/messages", NewRESTFunc(sendMessageToUserHandler)).Methods("POST")
+	r.Handle("/users/{public_id}/public-key", NewRESTFunc(getUserPublicKeyHandler)).Methods("GET")
 
 	// r.Handle("/users/{public_id}/messages", NewRESTFunc(GetUserMessagesHandler)).Methods("GET")
 
-	r.Handle("/messages", NewRESTFunc(GetMessagesHandler)).Methods("GET")
+	r.Handle("/messages", NewRESTFunc(getMessagesHandler)).Methods("GET")
 
-	// r.Handle("/sessions/challenge", NewRESTFunc(GetAuthenticationChallengeHandler)).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", NewRESTFunc(getDropBoxPackageHandler)).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", NewRESTFunc(dropPackageHandler)).Methods("POST")
+
+	r.Handle("/sessions/{username}/challenge", NewRESTFunc(createAuthChallengeHandler)).Methods("POST")
+	r.Handle("/sessions/{username}/challenge-response", NewRESTFunc(authChallengeResponseHandler)).Methods("POST")
+	// r.Handle("/sessions/challenge", NewRESTFunc(getAuthenticationChallengeHandler)).Methods("GET")
 }
 
 func playground() {
-	kvdb().Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(userIDsBucketName)
-		bucket.Put([]byte("gabble gabble"), []byte("goo goo"))
-		return nil
-	})
-
-	kvdb().View(func(tx *bolt.Tx) error {
-		val := tx.Bucket(userIDsBucketName).Get([]byte("gabble sgabble"))
-		log.Printf("gabble value: %s", val)
-		return nil
-	})
-
-	// salt, err := hex.DecodeString()
-	// if err != nil {
-	// 	log.Fatalf("salt err: %v", err);
-	// }
-
+	key := make([]byte, secretBoxKeySize)
+	crand.Read(key)
+	log.Printf("key: %s", hex.EncodeToString(key))
 	/*
-		key, err := hex.DecodeString("574c1aa36561e5e748a659f0ba8d4e2fb398512cb07d907579b0a7b1fbf2e50d")
+		key := make([]byte, secretBoxKeySize)
+		crand.Read(key)
+		msg := `{"uid":1, "ct":1473287177}`
+		cipherText, nonce, err := symmetricKeyEncrypt([]byte(msg), key)
 		if err != nil {
-			log.Fatalf("key err: %v", err)
+			log.Fatal(err)
 		}
-		cipherText, err := hex.DecodeString("c3f48480985a2b6f10b7703568807336a2b0a67eaa218f74c28b405be4c94f2b")
-		if err != nil {
-			log.Fatalf("cipherText err: %v", err)
-		}
-		nonce, err := hex.DecodeString("28861eac5b6eb77e3fa768ef5beae5663d88dc8663c32e2b")
-		if err != nil {
-			log.Fatalf("nonce: %v", err)
-		}
+		log.Printf("ct size: %d, nonce size: %d", len(cipherText), len(nonce))
+		tokenMaterial := append(cipherText, nonce...)
+		token := hex.EncodeToString(tokenMaterial)
+		log.Printf("token: %s", token)
 
-		msg, ok := symmetricKeyDecrypt(cipherText, nonce, key)
+		decodedToken, err := hex.DecodeString(token)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("decoded len: %d", len(decodedToken))
+		nonceStart := len(decodedToken) - secretBoxNonceSize
+		log.Printf("nonceStart: %d", nonceStart)
+		decodedNonce := decodedToken[nonceStart:]
+		decodedCipherText := decodedToken[0:nonceStart]
+		origMsg, ok := symmetricKeyDecrypt(decodedCipherText, decodedNonce, key)
 		if !ok {
-			log.Printf("failed to open message")
-			return
+			log.Fatal("unable to decrypt msg")
 		}
-		log.Printf("msg: %v", string(msg))
+		log.Printf("orig msg: %s", origMsg)
 	*/
-
-	// key stretching the password
-	/*
-		salt := make([]byte, secretBoxKeySize)
-		crand.Read(salt)
-		key, err := keyFromPassword(secretBoxKeySize, "foo", salt)
-		if err != nil {
-			log.Fatalf("error hashing: %v", err)
-		}
-		log.Printf("key: %v", key)
-
-		msg := "my secret settings"
-		cipherText, nonce, err := secretBoxMessage([]byte(msg), key)
-		if err != nil {
-			log.Fatalf("unable to secret box message: %v", err)
-		}
-		log.Printf("cipherText: %s\nnonce: %s", hex.EncodeToString(cipherText), hex.EncodeToString(nonce))
-
-		outMsg, ok := secretBoxOpenMessage(cipherText, nonce, key)
-		if !ok {
-			log.Fatalf("message was forged!")
-		}
-		log.Printf("out message: %s", string(outMsg))
-	*/
-
-	// public key encryption
-	/*
-		aliceKeys, err := generateKeyPair()
-		if err != nil {
-			log.Printf("couldn't create alice's keys: %v", err)
-		}
-		bobKeys, err := generateKeyPair()
-		if err != nil {
-			log.Printf("Couldn't create bob's keys: %v", err)
-		}
-		log.Printf("Alice Keys: %v", aliceKeys)
-		log.Printf("Bob's Keys: %v", bobKeys)
-
-		msg := "something hidden"
-		cipherText, nonce, err := publicKeyEncryptMessage([]byte(msg), bobKeys.public, aliceKeys.secret)
-		if err != nil {
-			log.Printf("unable to encrypt message")
-		}
-		log.Printf("cipher text: %s", hex.EncodeToString(cipherText))
-		log.Printf("nonce: %s", hex.EncodeToString(nonce))
-
-		outMsg, ok := publicKeyDecryptMessage(cipherText, nonce, aliceKeys.public, bobKeys.secret)
-		if !ok {
-			log.Printf("decrypted message not valid")
-		}
-		log.Printf("out msg: %s", string(outMsg))
-	*/
-
 }

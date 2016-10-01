@@ -50,10 +50,10 @@ func sendResponse(w http.ResponseWriter, response interface{}, httpCode int) {
 func sendErr(w http.ResponseWriter, msg string, httpCode int, apiCode ErrCode) {
 	sendResponse(
 		w,
-		map[string]interface{}{
-			"error_message": msg,
-			"error_code":    apiCode,
-		},
+		struct {
+			Msg  string  `json:"error_message"`
+			Code ErrCode `json:"error_code"`
+		}{Msg: msg, Code: apiCode},
 		httpCode)
 }
 
@@ -85,7 +85,7 @@ func sendNotFound(w http.ResponseWriter, msg string) {
 
 func sendSuccess(w http.ResponseWriter, response interface{}) {
 	if response == nil {
-		response = map[string]interface{}{}
+		response = struct{}{}
 	}
 
 	sendResponse(w, response, http.StatusOK)

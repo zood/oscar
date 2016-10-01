@@ -4,7 +4,6 @@ import (
 	"bytes"
 	crand "crypto/rand"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 )
@@ -32,7 +31,7 @@ func TestMessageMarshaling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Printf("%s\n", marshaledMessage)
+	// fmt.Printf("%s\n", marshaledMessage)
 }
 
 func TestMessageUnmarshaling(t *testing.T) {

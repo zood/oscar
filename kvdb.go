@@ -9,6 +9,7 @@ import (
 var gKVDB *bolt.DB
 var userIDsBucketName = []byte("user_ids")
 var publicIDsBucketName = []byte("public_ids")
+var dropboxesBucketName = []byte("drop_boxes")
 
 func initKVDB(dbPath string) error {
 	var err error

@@ -28,6 +28,10 @@ const (
 	ErrorArgon2iOpsLimitTooLow                   = 13
 	ErrorArgon2iMemLimitTooLow                   = 14
 	ErrorInvalidAccessToken                      = 15
+	ErrorUserNotFound                            = 16
+	ErrorChallengeNotFound                       = 17
+	ErrorChallengeExpired                        = 18
+	ErrorLoginFailed                             = 19
 )
 
 type serverError struct {
