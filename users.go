@@ -18,17 +18,17 @@ var validUsernamePattern = regexp.MustCompile(`^[a-z0-9]{5,}$`)
 
 // User ...
 type User struct {
-	ID                          int            `json:"-"db:"id"`
-	PublicID                    encodableBytes `json:"id"`
-	Username                    string         `json:"username"db:"username"`
-	PasswordSalt                encodableBytes `json:"password_salt"db:"password_salt"`
-	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit"db:"password_hash_operations_limit"`
-	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit"db:"password_hash_memory_limit"`
-	PublicKey                   encodableBytes `json:"public_key"db:"public_key"`
-	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key"db:"wrapped_secret_key"`
-	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce"db:"wrapped_secret_key_nonce"`
-	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key"db:"wrapped_symmetric_key"`
-	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce"db:"wrapped_symmetric_key_nonce"`
+	ID                          int64          `json:"-"db:"id"`
+	PublicID                    encodableBytes `json:"id,omitempty"`
+	Username                    string         `json:"username,omitempty"db:"username"`
+	PasswordSalt                encodableBytes `json:"password_salt,omitempty"db:"password_salt"`
+	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit,omitempty"db:"password_hash_operations_limit"`
+	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty"db:"password_hash_memory_limit"`
+	PublicKey                   encodableBytes `json:"public_key,omitempty"db:"public_key"`
+	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key,omitempty"db:"wrapped_secret_key"`
+	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce,omitempty"db:"wrapped_secret_key_nonce"`
+	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key,omitempty"db:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce,omitempty"db:"wrapped_symmetric_key_nonce"`
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -262,21 +262,47 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 // searchUsersHandler handles GET /users
 func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
+	ok, _ := verifySession(w, r)
+	if !ok {
+		return
+	}
+
 	username := r.URL.Query().Get("username")
 	username = strings.TrimSpace(username)
 	username = strings.ToLower(username)
 
-	var foundID int64
-	err := db().QueryRow("SELECT id FROM users WHERE username=?", username).Scan(&foundID)
+	user := User{}
+	err := db().QueryRow("SELECT id, public_key FROM users WHERE username=?", username).Scan(&user.ID, &user.PublicKey)
 	switch err {
 	case nil:
-		pubID := pubIDFromUserID(foundID)
-		sendSuccess(w, struct {
-			ID encodableBytes `json:"id"`
-		}{ID: pubID})
+		user.PublicID = pubIDFromUserID(user.ID)
+		user.Username = username
+		sendSuccess(w, user)
 	case sql.ErrNoRows:
 		sendErr(w, "user not found", http.StatusNotFound, ErrorUserNotFound)
 	default:
 		sendInternalErr(w, err)
 	}
+}
+
+func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
+	ok, _ := verifySession(w, r)
+	if !ok {
+		return
+	}
+
+	userID, ok := parseUserID(w, r)
+	if !ok {
+		return
+	}
+
+	user := User{}
+	err := db().QueryRowx("SELECT id, public_key, username FROM users WHERE id=?", userID).StructScan(&user)
+	if err != nil {
+		// don't need to check for ErrNoRows, because parseUserID ensures the user exists
+		sendInternalErr(w, err)
+		return
+	}
+
+	sendSuccess(w, user)
 }

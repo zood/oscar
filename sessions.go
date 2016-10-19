@@ -29,7 +29,7 @@ type loginResponse struct {
 }
 
 func newAccessToken(userID int64) (string, error) {
-	token := randAlphaNum(32)
+	token := randBase62(32)
 
 	const insertSQL = `
     INSERT INTO sessions (user_id, access_token, creation_date) VALUES (?, ?, ?)`
@@ -43,9 +43,7 @@ func newAccessToken(userID int64) (string, error) {
 }
 
 func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, userID int64) {
-	args := r.URL.Query()
-	accessToken := args.Get("access_token")
-	token := strings.ToLower(strings.TrimSpace(accessToken))
+	token := r.Header.Get("X-Oscar-Access-Token")
 	if token == "" {
 		authenticated = false
 		sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
@@ -53,7 +51,7 @@ func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, 
 	}
 
 	selectSQL := `SELECT user_id FROM sessions WHERE access_token=?`
-	err := db().QueryRow(selectSQL, accessToken).Scan(&userID)
+	err := db().QueryRow(selectSQL, token).Scan(&userID)
 	if err == nil {
 		authenticated = true
 		return

@@ -57,21 +57,20 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
-	r.Handle("/users", NewRESTFunc(searchUsersHandler)).Methods("GET")
-	r.Handle("/users", NewRESTFunc(createUserHandler)).Methods("POST")
-	r.Handle("/users/{public_id}/messages", NewRESTFunc(sendMessageToUserHandler)).Methods("POST")
-	r.Handle("/users/{public_id}/public-key", NewRESTFunc(getUserPublicKeyHandler)).Methods("GET")
+	r.Handle("/users", newRESTFunc(searchUsersHandler)).Methods("GET")
+	r.Handle("/users", newRESTFunc(createUserHandler)).Methods("POST")
+	r.Handle("/users/{public_id}", newRESTFunc(getUserInfoHandler)).Methods("GET")
+	r.Handle("/users/{public_id}/messages", newRESTFunc(sendMessageToUserHandler)).Methods("POST")
+	r.Handle("/users/{public_id}/public-key", newRESTFunc(getUserPublicKeyHandler)).Methods("GET")
 
-	// r.Handle("/users/{public_id}/messages", NewRESTFunc(GetUserMessagesHandler)).Methods("GET")
+	r.Handle("/messages", newRESTFunc(getMessagesHandler)).Methods("GET")
+	r.Handle("/messages/{msg_id}/processed", newRESTFunc(editMessageHandler)).Methods("PUT")
 
-	r.Handle("/messages", NewRESTFunc(getMessagesHandler)).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", newRESTFunc(getDropBoxPackageHandler)).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", newRESTFunc(dropPackageHandler)).Methods("POST")
 
-	r.Handle("/drop-boxes/{box_id}", NewRESTFunc(getDropBoxPackageHandler)).Methods("GET")
-	r.Handle("/drop-boxes/{box_id}", NewRESTFunc(dropPackageHandler)).Methods("POST")
-
-	r.Handle("/sessions/{username}/challenge", NewRESTFunc(createAuthChallengeHandler)).Methods("POST")
-	r.Handle("/sessions/{username}/challenge-response", NewRESTFunc(authChallengeResponseHandler)).Methods("POST")
-	// r.Handle("/sessions/challenge", NewRESTFunc(getAuthenticationChallengeHandler)).Methods("GET")
+	r.Handle("/sessions/{username}/challenge", newRESTFunc(createAuthChallengeHandler)).Methods("POST")
+	r.Handle("/sessions/{username}/challenge-response", newRESTFunc(authChallengeResponseHandler)).Methods("POST")
 }
 
 func playground() {

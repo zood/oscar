@@ -31,8 +31,7 @@ func (rf *restFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rf.f(w, r)
 }
 
-// NewRESTFunc ...
-func NewRESTFunc(f func(http.ResponseWriter, *http.Request)) http.Handler {
+func newRESTFunc(f func(http.ResponseWriter, *http.Request)) http.Handler {
 	return &restFunc{f: f}
 }
 

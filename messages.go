@@ -1,12 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 // a type that can conforms to the json.Marshal and json.Unmarshal interfaces,
@@ -46,14 +50,15 @@ func (eb encodableBytes) Value() (driver.Value, error) {
 
 // Message ...
 type Message struct {
-	ID                int            `db:"id"json:"id"`
-	RecipientID       int64          `db:"recipient_id"json:"-"`
+	ID                int            `db:"id" json:"id"`
+	RecipientID       int64          `db:"recipient_id" json:"-"`
 	PublicRecipientID encodableBytes `json:"recipient_id"`
-	SenderID          int64          `db:"sender_id"json:"-"`
+	SenderID          int64          `db:"sender_id" json:"-"`
 	PublicSenderID    encodableBytes `json:"sender_id"`
-	CipherText        encodableBytes `db:"cipher_text"json:"cipher_text"`
-	Nonce             encodableBytes `db:"nonce"json:"nonce"`
-	SentDate          int64          `db:"sent_date"json:"sent_date"`
+	CipherText        encodableBytes `db:"cipher_text" json:"cipher_text"`
+	Nonce             encodableBytes `db:"nonce" json:"nonce"`
+	SentDate          int64          `db:"sent_date" json:"sent_date"`
+	Processed         bool           `db:"processed" json:"processed"`
 }
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
@@ -79,8 +84,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		CipherText encodableBytes `json:"cipher_text"`
 		Nonce      encodableBytes `json:"nonce"`
 	}{}
-	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&body)
+	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		sendBadReq(w, "unable to decode body: "+err.Error())
 		return
@@ -127,4 +131,47 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(w, msgs)
+}
+
+// editMessageHandler handles PUT /messages/{msg_id}/processed
+func editMessageHandler(w http.ResponseWriter, r *http.Request) {
+	ok, sessionUserID := verifySession(w, r)
+	if !ok {
+		return
+	}
+
+	msgIDStr := mux.Vars(r)["msg_id"]
+	msgID, err := strconv.Atoi(msgIDStr)
+	if err != nil {
+		sendBadReq(w, "message id is not a number")
+		return
+	}
+
+	// first, check if this message exists and if this user is the recipient
+	var foundID, recipientID int64
+	err = db().QueryRow("SELECT id, recipient_id FROM messages WHERE id=?", msgID).Scan(&foundID, &recipientID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// a lie. just don't want to tell them, in case they're not the recipient
+			sendBadReq(w, "can't load message")
+		} else {
+			sendInternalErr(w, err)
+		}
+		return
+	}
+
+	// make sure the caller is the message recipient
+	if recipientID != sessionUserID {
+		// a lie
+		sendBadReq(w, "can't load message")
+		return
+	}
+
+	_, err = db().Exec("UPDATE messages SET processed=1 WHERE id=?", foundID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
+
+	sendSuccess(w, nil)
 }

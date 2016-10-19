@@ -135,3 +135,19 @@ func symmetricKeyDecrypt(cipherText, nonce, key []byte) ([]byte, bool) {
 	}
 	return msg, true
 }
+
+func hashData(data, key []byte) ([]byte, bool) {
+	hash := make([]byte, C.crypto_generichash_BYTES)
+	result := C.crypto_generichash(
+		(*C.uchar)(&hash[0]),
+		C.crypto_generichash_BYTES,
+		(*C.uchar)(&data[0]),
+		C.ulonglong(len(data)),
+		(*C.uchar)(&key[0]),
+		C.size_t(len(key)))
+	if result != 0 {
+		return nil, false
+	}
+
+	return hash, true
+}
