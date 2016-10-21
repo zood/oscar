@@ -75,7 +75,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// find the user
 	selectSQL := `
-	SELECT id, wrapped_secret_key, wrapped_secret_key_nonce, password_salt, password_hash_operations_limit, password_hash_memory_limit FROM users WHERE username=?`
+	SELECT id, public_key, wrapped_secret_key, wrapped_secret_key_nonce, password_salt, password_hash_operations_limit, password_hash_memory_limit FROM users WHERE username=?`
 	user := User{}
 	err := db().Get(&user, selectSQL, username)
 	if err != nil {

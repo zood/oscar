@@ -28,8 +28,8 @@ func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	return boxID, true
 }
 
-// getDropBoxPackageHandler handles GET /drop-boxes/{box_id}
-func getDropBoxPackageHandler(w http.ResponseWriter, r *http.Request) {
+// pickUpPackageHandler handles GET /drop-boxes/{box_id}
+func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
 	ok, _ := verifySession(w, r)
 	if !ok {
 		return

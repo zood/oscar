@@ -29,6 +29,10 @@ func initKVDB(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("Error creating '%s' bucket: %v", publicIDsBucketName, err)
 	}
+	_, err = tx.CreateBucketIfNotExists(dropboxesBucketName)
+	if err != nil {
+		return fmt.Errorf("Error creating '%s' bucket: %v", dropboxesBucketName, err)
+	}
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("Error commiting initialiation of kvdb: %v", err)
