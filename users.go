@@ -16,6 +16,8 @@ import (
 
 var validUsernamePattern = regexp.MustCompile(`^[a-z0-9]{5,}$`)
 
+const publicUserIDSize = 16
+
 // User ...
 type User struct {
 	ID                          int64          `json:"-"db:"id"`
@@ -186,8 +188,8 @@ func createUser(user User) ([]byte, *serverError) {
 		return nil, newInternalErr()
 	}
 
-	// create a 256-bit id for public use
-	pubID := make([]byte, 32)
+	// create an id for public use
+	pubID := make([]byte, publicUserIDSize)
 	idExists := true
 	tx, err := kvdb().Begin(true)
 	if err != nil {

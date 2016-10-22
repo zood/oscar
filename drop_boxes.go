@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const dropBoxIDSize = 16
+
 func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	vars := mux.Vars(r)
 
@@ -20,7 +22,7 @@ func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 		return nil, false
 	}
 
-	if len(boxID) != 512 {
+	if len(boxID) != dropBoxIDSize {
 		sendBadReq(w, fmt.Sprintf("invalid drop box id"))
 		return nil, false
 	}

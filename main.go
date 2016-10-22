@@ -1,8 +1,6 @@
 package main
 
 import (
-	crand "crypto/rand"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -74,35 +72,4 @@ func installEndPoints(r *mux.Router) {
 }
 
 func playground() {
-	key := make([]byte, secretBoxKeySize)
-	crand.Read(key)
-	log.Printf("key: %s", hex.EncodeToString(key))
-	/*
-		key := make([]byte, secretBoxKeySize)
-		crand.Read(key)
-		msg := `{"uid":1, "ct":1473287177}`
-		cipherText, nonce, err := symmetricKeyEncrypt([]byte(msg), key)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("ct size: %d, nonce size: %d", len(cipherText), len(nonce))
-		tokenMaterial := append(cipherText, nonce...)
-		token := hex.EncodeToString(tokenMaterial)
-		log.Printf("token: %s", token)
-
-		decodedToken, err := hex.DecodeString(token)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("decoded len: %d", len(decodedToken))
-		nonceStart := len(decodedToken) - secretBoxNonceSize
-		log.Printf("nonceStart: %d", nonceStart)
-		decodedNonce := decodedToken[nonceStart:]
-		decodedCipherText := decodedToken[0:nonceStart]
-		origMsg, ok := symmetricKeyDecrypt(decodedCipherText, decodedNonce, key)
-		if !ok {
-			log.Fatal("unable to decrypt msg")
-		}
-		log.Printf("orig msg: %s", origMsg)
-	*/
 }
