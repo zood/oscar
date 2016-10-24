@@ -64,11 +64,15 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/messages", newRESTFunc(getMessagesHandler)).Methods("GET")
 	r.Handle("/messages/{msg_id}/processed", newRESTFunc(editMessageHandler)).Methods("PUT")
 
+	// this has to come first, so it has a chance to match before the box_id urls
+	r.Handle("/drop-boxes/watch", newRESTFunc(createPackageWatcherHandler)).Methods("GET")
 	r.Handle("/drop-boxes/{box_id}", newRESTFunc(pickUpPackageHandler)).Methods("GET")
 	r.Handle("/drop-boxes/{box_id}", newRESTFunc(dropPackageHandler)).Methods("PUT")
 
 	r.Handle("/sessions/{username}/challenge", newRESTFunc(createAuthChallengeHandler)).Methods("POST")
 	r.Handle("/sessions/{username}/challenge-response", newRESTFunc(authChallengeResponseHandler)).Methods("POST")
+
+	r.Handle("/goroutine-stacks", newRESTFunc(goroutineStacksHandler)).Methods("GET")
 }
 
 func playground() {
