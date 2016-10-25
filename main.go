@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -25,6 +26,11 @@ func main() {
 	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
 	flag.Parse()
 	Debug = *debug
+
+	gFCMServerKey = os.Getenv("FCM_SERVER_KEY")
+	if gFCMServerKey == "" {
+		log.Fatal("$FCM_SERVER_KEY is missing/empty")
+	}
 
 	err := initDB(*sqlDSN)
 	if err != nil {
@@ -57,6 +63,8 @@ func main() {
 func installEndPoints(r *mux.Router) {
 	r.Handle("/users", newRESTFunc(searchUsersHandler)).Methods("GET")
 	r.Handle("/users", newRESTFunc(createUserHandler)).Methods("POST")
+	r.Handle("/users/me/fcm-tokens", newRESTFunc(addFCMTokenHandler)).Methods("POST")
+	r.Handle("/users/me/fcm-tokens/{token}", newRESTFunc(deleteFCMTokenHandler)).Methods("DELETE")
 	r.Handle("/users/{public_id}", newRESTFunc(getUserInfoHandler)).Methods("GET")
 	r.Handle("/users/{public_id}/messages", newRESTFunc(sendMessageToUserHandler)).Methods("POST")
 	r.Handle("/users/{public_id}/public-key", newRESTFunc(getUserPublicKeyHandler)).Methods("GET")
@@ -73,7 +81,20 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/sessions/{username}/challenge-response", newRESTFunc(authChallengeResponseHandler)).Methods("POST")
 
 	r.Handle("/goroutine-stacks", newRESTFunc(goroutineStacksHandler)).Methods("GET")
+	r.Handle("/test", newRESTFunc(testHandler)).Methods("GET")
+}
+
+func testHandler(w http.ResponseWriter, r *http.Request) {
+	pushMessageToUser(22, 16)
+	// sendFirebaseMessage(16, nil)
 }
 
 func playground() {
+	// rdr := bytes.NewReader([]byte{'w', 'o', 'r', 'd'})
+	// var token string
+	// err := json.NewDecoder(rdr).Decode(&token)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// log.Printf("decoded: %v", token)
 }

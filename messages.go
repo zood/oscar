@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -50,15 +51,15 @@ func (eb encodableBytes) Value() (driver.Value, error) {
 
 // Message ...
 type Message struct {
-	ID                int            `db:"id" json:"id"`
-	RecipientID       int64          `db:"recipient_id" json:"-"`
-	PublicRecipientID encodableBytes `json:"recipient_id"`
-	SenderID          int64          `db:"sender_id" json:"-"`
-	PublicSenderID    encodableBytes `json:"sender_id"`
-	CipherText        encodableBytes `db:"cipher_text" json:"cipher_text"`
-	Nonce             encodableBytes `db:"nonce" json:"nonce"`
-	SentDate          int64          `db:"sent_date" json:"sent_date"`
-	Processed         bool           `db:"processed" json:"processed"`
+	ID             int64          `db:"id" json:"id"`
+	RecipientID    int64          `db:"recipient_id" json:"-"`
+	SenderID       int64          `db:"sender_id" json:"-"`
+	PublicSenderID encodableBytes `json:"sender_id"`
+	CipherText     encodableBytes `db:"cipher_text" json:"cipher_text"`
+	Nonce          encodableBytes `db:"nonce" json:"nonce"`
+	SentDate       int64          `db:"sent_date" json:"sent_date"`
+	Processed      bool           `db:"processed" json:"processed"`
+	// PublicRecipientID encodableBytes `json:"recipient_id"`
 }
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
@@ -92,13 +93,22 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	insertSQL := `
     INSERT INTO messages (recipient_id, sender_id, cipher_text, nonce, sent_date) VALUES (?, ?, ?, ?, ?)`
-	_, err = db().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
+	result, err := dbx().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
 	sendSuccess(w, nil)
+
+	go func() {
+		msgID, err := result.LastInsertId()
+		if err != nil {
+			logErr(err)
+			return
+		}
+		pushMessageToUser(msgID, userID)
+	}()
 }
 
 // getMessagesHandler handles GET /messages
@@ -110,7 +120,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
-	rows, err := db().Queryx(selectSQL, sessionUserID)
+	rows, err := dbx().Queryx(selectSQL, sessionUserID)
 	if err != nil {
 		logErr(err)
 		sendInternalErr(w, err)
@@ -125,12 +135,53 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 			sendInternalErr(w, err)
 			return
 		}
-		msg.PublicRecipientID = pubIDFromUserID(msg.RecipientID)
+		// msg.PublicRecipientID = pubIDFromUserID(msg.RecipientID)
 		msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
 		msgs = append(msgs, msg)
 	}
 
 	sendSuccess(w, msgs)
+}
+
+func pushMessageToUser(msgID int64, userID int64) {
+	selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
+	msg := Message{}
+	err := dbx().Get(&msg, selectSQL, msgID)
+	if err != nil {
+		logErr(err)
+		return
+	}
+
+	// msg.PublicRecipientID = pubIDFromUserID(msg.RecipientID)
+	msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
+
+	msgMap := map[string]interface{}{
+		"id":          strconv.FormatInt(msg.ID, 10),
+		"cipher_text": msg.CipherText,
+		"nonce":       msg.Nonce,
+		"sender_id":   msg.PublicSenderID,
+		"sent_date":   strconv.FormatInt(msg.SentDate, 10),
+		"type":        "message_received",
+	}
+
+	buf, err := json.Marshal(msgMap)
+	if err != nil {
+		logErr(err)
+		return
+	}
+
+	// if the payload is small, send the entire thing
+	if len(buf) <= 3584 {
+		log.Printf("payload: %s", buf)
+		sendFirebaseMessage(userID, msgMap)
+		return
+	}
+
+	// it's too big, so we'll tell the client to sync instead
+	sendFirebaseMessage(userID, struct {
+		Type      string `json:"type"`
+		MessageID string `json:"message_id"`
+	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msgID, 10)})
 }
 
 // editMessageHandler handles PUT /messages/{msg_id}/processed
@@ -149,7 +200,7 @@ func editMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	// first, check if this message exists and if this user is the recipient
 	var foundID, recipientID int64
-	err = db().QueryRow("SELECT id, recipient_id FROM messages WHERE id=?", msgID).Scan(&foundID, &recipientID)
+	err = dbx().QueryRow("SELECT id, recipient_id FROM messages WHERE id=?", msgID).Scan(&foundID, &recipientID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// a lie. just don't want to tell them, in case they're not the recipient
@@ -167,7 +218,7 @@ func editMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db().Exec("UPDATE messages SET processed=1 WHERE id=?", foundID)
+	_, err = dbx().Exec("UPDATE messages SET processed=1 WHERE id=?", foundID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

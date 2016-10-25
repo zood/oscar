@@ -150,7 +150,7 @@ func createUser(user User) ([]byte, *serverError) {
 	// check if the username is already in use
 	checkUsernameSQL := "SELECT id FROM users WHERE username=?"
 	var foundID int
-	err := db().QueryRow(checkUsernameSQL, user.Username).Scan(&foundID)
+	err := dbx().QueryRow(checkUsernameSQL, user.Username).Scan(&foundID)
 	if err == nil {
 		return nil, &serverError{code: ErrorUsernameNotAvailable, message: "That username is already in use"}
 	}
@@ -166,7 +166,7 @@ func createUser(user User) ([]byte, *serverError) {
 						wrapped_symmetric_key,
 						wrapped_symmetric_key_nonce)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	result, err := db().Exec(
+	result, err := dbx().Exec(
 		insertSQL,
 		user.Username,
 		user.PasswordSalt,
@@ -249,7 +249,7 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 	selectSQL := `SELECT public_key FROM users WHERE id=?`
 	var pubKey []byte
-	err := db().QueryRow(selectSQL, userID).Scan(&pubKey)
+	err := dbx().QueryRow(selectSQL, userID).Scan(&pubKey)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -274,7 +274,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	username = strings.ToLower(username)
 
 	user := User{}
-	err := db().QueryRow("SELECT id, public_key FROM users WHERE username=?", username).Scan(&user.ID, &user.PublicKey)
+	err := dbx().QueryRow("SELECT id, public_key FROM users WHERE username=?", username).Scan(&user.ID, &user.PublicKey)
 	switch err {
 	case nil:
 		user.PublicID = pubIDFromUserID(user.ID)
@@ -299,7 +299,7 @@ func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := User{}
-	err := db().QueryRowx("SELECT id, public_key, username FROM users WHERE id=?", userID).StructScan(&user)
+	err := dbx().QueryRowx("SELECT id, public_key, username FROM users WHERE id=?", userID).StructScan(&user)
 	if err != nil {
 		// don't need to check for ErrNoRows, because parseUserID ensures the user exists
 		sendInternalErr(w, err)

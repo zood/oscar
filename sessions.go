@@ -33,7 +33,7 @@ func newAccessToken(userID int64) (string, error) {
 
 	const insertSQL = `
     INSERT INTO sessions (user_id, access_token, creation_date) VALUES (?, ?, ?)`
-	_, err := db().Exec(insertSQL, userID, token, time.Now().Unix())
+	_, err := dbx().Exec(insertSQL, userID, token, time.Now().Unix())
 	if err != nil {
 		logErr(err)
 		return "", err
@@ -51,7 +51,7 @@ func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, 
 	}
 
 	selectSQL := `SELECT user_id FROM sessions WHERE access_token=?`
-	err := db().QueryRow(selectSQL, token).Scan(&userID)
+	err := dbx().QueryRow(selectSQL, token).Scan(&userID)
 	if err == nil {
 		authenticated = true
 		return
@@ -77,7 +77,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	selectSQL := `
 	SELECT id, public_key, wrapped_secret_key, wrapped_secret_key_nonce, password_salt, password_hash_operations_limit, password_hash_memory_limit FROM users WHERE username=?`
 	user := User{}
-	err := db().Get(&user, selectSQL, username)
+	err := dbx().Get(&user, selectSQL, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			sendErr(w, "user not found", http.StatusNotFound, ErrorUserNotFound)
@@ -96,7 +96,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// delete any existing challenge for this user
-	_, err = db().Exec("DELETE FROM session_challenges WHERE user_id=?", user.ID)
+	_, err = dbx().Exec("DELETE FROM session_challenges WHERE user_id=?", user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -104,7 +104,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	insertSQL := `
 	INSERT INTO session_challenges (user_id, creation_date, challenge, secret_key, public_key) VALUES (?, ?, ?, ?, ?)`
-	_, err = db().Exec(insertSQL, user.ID, time.Now().Unix(), challenge, kp.secret, kp.public)
+	_, err = dbx().Exec(insertSQL, user.ID, time.Now().Unix(), challenge, kp.secret, kp.public)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -141,7 +141,7 @@ func authChallengeResponseHandler(w http.ResponseWriter, r *http.Request) {
 	var userPubKey []byte
 	var wrappedSymKey []byte
 	var wrappedSymKeyNonce []byte
-	err = db().QueryRow(userSQL, username).Scan(&userID, &userPubKey, &wrappedSymKey, &wrappedSymKeyNonce)
+	err = dbx().QueryRow(userSQL, username).Scan(&userID, &userPubKey, &wrappedSymKey, &wrappedSymKeyNonce)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			sendErr(w, "unknown user", http.StatusNotFound, ErrorUserNotFound)
@@ -155,7 +155,7 @@ func authChallengeResponseHandler(w http.ResponseWriter, r *http.Request) {
 	const challengeSQL = `
 	SELECT id, creation_date, challenge, secret_key, public_key FROM session_challenges WHERE user_id=?`
 	challenge := sessionChallenge{}
-	err = db().QueryRowx(challengeSQL, userID).StructScan(&challenge)
+	err = dbx().QueryRowx(challengeSQL, userID).StructScan(&challenge)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			sendErr(w, "challenge not found", http.StatusNotFound, ErrorChallengeNotFound)
@@ -203,7 +203,7 @@ func authChallengeResponseHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteChallenge(challengeID int64) {
-	_, err := db().Exec("DELETE FROM session_challenges WHERE id=?", challengeID)
+	_, err := dbx().Exec("DELETE FROM session_challenges WHERE id=?", challengeID)
 	if err != nil {
 		logErr(err)
 	}

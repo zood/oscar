@@ -18,6 +18,14 @@ DELETE FROM messages;
 DELETE FROM users;
 */
 
+const (
+	tableMessages          string = "messages"
+	tableSessionChallenges        = "session_challenges"
+	tableSessions                 = "sessions"
+	tableUserFCMTokens            = "user_fcm_tokens"
+	tableUsers                    = "users"
+)
+
 func initDB(sqlDSN string) error {
 	if sqlDSN == "" {
 		return errors.New("sql dsn is empty")
@@ -40,6 +48,10 @@ func initDB(sqlDSN string) error {
 	return nil
 }
 
-func db() *sqlx.DB {
+func dbx() *sqlx.DB {
 	return gSQLXDatabase
+}
+
+func db() *sql.DB {
+	return gSQLDatabase
 }
