@@ -21,8 +21,8 @@ type encodableBytes []byte
 func (eb encodableBytes) MarshalJSON() ([]byte, error) {
 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(eb)))
 	base64.StdEncoding.Encode(dst, eb)
-	final := append([]byte(`"`), dst...)
-	final = append(final, []byte(`"`)...)
+	final := append([]byte{'"'}, dst...)
+	final = append(final, '"')
 	return final, nil
 }
 
