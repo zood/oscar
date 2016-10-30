@@ -39,7 +39,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	pubIDStr := vars["public_id"]
 	pubID, err := hex.DecodeString(pubIDStr)
 	if err != nil {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr))
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
 		return 0, false
 	}
 
@@ -49,13 +49,13 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return nil
 	})
 	if idBytes == nil {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr))
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
 		return 0, false
 	}
 
 	id := bytesToInt64(idBytes)
 	if id < 0 {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr))
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
 		return 0, false
 	}
 
@@ -281,7 +281,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 		user.Username = username
 		sendSuccess(w, user)
 	case sql.ErrNoRows:
-		sendErr(w, "user not found", http.StatusNotFound, ErrorUserNotFound)
+		sendNotFound(w, "user not found", ErrorUserNotFound)
 	default:
 		sendInternalErr(w, err)
 	}

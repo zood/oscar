@@ -80,7 +80,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	err := dbx().Get(&user, selectSQL, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendErr(w, "user not found", http.StatusNotFound, ErrorUserNotFound)
+			sendNotFound(w, "user not found", ErrorUserNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}
@@ -144,7 +144,7 @@ func authChallengeResponseHandler(w http.ResponseWriter, r *http.Request) {
 	err = dbx().QueryRow(userSQL, username).Scan(&userID, &userPubKey, &wrappedSymKey, &wrappedSymKeyNonce)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendErr(w, "unknown user", http.StatusNotFound, ErrorUserNotFound)
+			sendNotFound(w, "unknown user", ErrorUserNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}
@@ -158,7 +158,7 @@ func authChallengeResponseHandler(w http.ResponseWriter, r *http.Request) {
 	err = dbx().QueryRowx(challengeSQL, userID).StructScan(&challenge)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendErr(w, "challenge not found", http.StatusNotFound, ErrorChallengeNotFound)
+			sendNotFound(w, "challenge not found", ErrorChallengeNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}

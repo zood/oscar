@@ -59,7 +59,7 @@ func (pl packageListener) read() {
 			break
 		}
 		if msgType != websocket.BinaryMessage {
-			log.Printf("received a non-text message")
+			log.Printf("received a non-binary message")
 			break
 		}
 		if len(buf) == 0 {

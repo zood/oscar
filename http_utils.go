@@ -78,8 +78,8 @@ func sendInternalErr(w http.ResponseWriter, err error) {
 	}
 }
 
-func sendNotFound(w http.ResponseWriter, msg string) {
-	sendErr(w, msg, http.StatusNotFound, ErrorNotFound)
+func sendNotFound(w http.ResponseWriter, msg string, apiCode ErrCode) {
+	sendErr(w, msg, http.StatusNotFound, apiCode)
 }
 
 func sendSuccess(w http.ResponseWriter, response interface{}) {
