@@ -102,6 +102,10 @@ func (pl packageListener) watch(boxID []byte) {
 	sub := dropBoxPubSub.Sub(hexID)
 	pl.subs[hexID] = sub
 	go func() {
+		tmp := pickUpPackage(boxID)
+		if len(tmp) > 0 {
+			sub <- tmp
+		}
 		for pkg := range sub {
 			bytes := append([]byte{1}, boxID...)
 			bytes = append(bytes, pkg.([]byte)...)
@@ -162,14 +166,18 @@ func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+	w.Write(pickUpPackage(boxID))
+}
+
+func pickUpPackage(boxID []byte) []byte {
 	var pkg []byte
 	kvdb().View(func(tx *bolt.Tx) error {
 		pkg = tx.Bucket(dropboxesBucketName).Get(boxID)
 		return nil
 	})
 
-	w.WriteHeader(http.StatusOK)
-	w.Write(pkg)
+	return pkg
 }
 
 // dropPackageHandler handles POST /drop-boxes/{box_id}
