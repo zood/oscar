@@ -32,6 +32,7 @@ const (
 	ErrorChallengeNotFound                       = 17
 	ErrorChallengeExpired                        = 18
 	ErrorLoginFailed                             = 19
+	ErrorBackupNotFound                          = 20
 )
 
 type serverError struct {

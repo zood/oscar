@@ -67,7 +67,7 @@ func sendFirebaseMessage(userID int64, payload interface{}) {
 	}
 
 	if len(tokens) == 0 {
-		log.Printf("|  no tokens for %d", userID)
+		log.Printf("  no tokens for %d", userID)
 		return
 	}
 	priority := "normal"
@@ -120,26 +120,42 @@ func sendFirebaseMessage(userID int64, payload interface{}) {
 		return
 	}
 
-	log.Printf("about to check fcm send results")
 	// if everything went smoothly, we're done
 	if fcmBody.Failure == 0 && fcmBody.CanonicalIDs == 0 {
-		log.Printf("fcm send was normal")
 		return
 	}
+
+	log.Printf("fcm send was less than normal")
 
 	// let's find out what went wrong
 	for i, result := range fcmBody.Results {
 		if result.MessageID != nil && result.RegistrationID != nil {
-			changes, err := db().Exec("UPDATE user_fcm_tokens SET token=? WHERE token=?", result.RegistrationID, tokens[i])
-			if err != nil {
-				logErr(err)
-			} else {
-				cnt, err := changes.RowsAffected()
+			// We've been provided a canonical registration id. Check if we
+			// already have that ID. If so, just drop the old token. If not,
+			// update the told token to the new one.
+			log.Printf("| MessageID: %v, RegID: %v", result.MessageID, result.RegistrationID)
+			var foundID int64
+			// check if we already have the canonical token for this user
+			err := dbx().Get(&foundID, "SELECT id FROM user_fcm_tokens WHERE user_id=? AND token=?", userID, result.RegistrationID)
+			if err == nil {
+				// we do, so drop the row with the old token
+				_, err := dbx().Exec("DELETE FROM user_fcm_tokens WHERE token=?", tokens[i])
+				if err != nil {
+					logErr(err)
+				}
+			} else if err == sql.ErrNoRows {
+				// nope, we don't. So replace the old token.
+				changes, err := db().Exec("UPDATE user_fcm_tokens SET token=? WHERE token=?", result.RegistrationID, tokens[i])
 				if err != nil {
 					logErr(err)
 				} else {
-					if cnt != 1 {
-						logErr(fmt.Errorf("received a registration id change, but no %d rows affected in db change\nmessage_id: %s\nregistration_id: %s\nuser id: %d\ntoken: %s", cnt, *result.MessageID, *result.RegistrationID, userID, tokens[i]))
+					cnt, err := changes.RowsAffected()
+					if err != nil {
+						logErr(err)
+					} else {
+						if cnt != 1 {
+							logErr(fmt.Errorf("received a registration id change, but no %d rows affected in db change\nmessage_id: %s\nregistration_id: %s\nuser id: %d\ntoken: %s", cnt, *result.MessageID, *result.RegistrationID, userID, tokens[i]))
+						}
 					}
 				}
 			}
@@ -149,7 +165,7 @@ func sendFirebaseMessage(userID int64, payload interface{}) {
 		if result.Error != nil {
 			switch *result.Error {
 			case "Unavailable":
-				// retry request
+				// TODO: retry request
 			case "InvalidRegistration":
 				fallthrough
 			case "NotRegistered":

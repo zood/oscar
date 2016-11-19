@@ -1,12 +1,10 @@
 package main
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -58,8 +56,6 @@ type Message struct {
 	CipherText     encodableBytes `db:"cipher_text" json:"cipher_text"`
 	Nonce          encodableBytes `db:"nonce" json:"nonce"`
 	SentDate       int64          `db:"sent_date" json:"sent_date"`
-	Processed      bool           `db:"processed" json:"processed"`
-	// PublicRecipientID encodableBytes `json:"recipient_id"`
 }
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
@@ -143,6 +139,32 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, msgs)
 }
 
+// handles DELETE /messages/{message_id}
+func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	msgIDStr := vars["message_id"]
+	msgID, err := strconv.ParseInt(msgIDStr, 10, 64)
+	if err != nil {
+		sendBadReq(w, "Invalid message id")
+		return
+	}
+
+	ok, userID := verifySession(w, r)
+	if !ok {
+		return
+	}
+
+	// only delete the message if the calling user is also the recipient
+	deleteSQL := `DELETE FROM messages WHERE recipient_id=? AND id=?`
+	_, err = dbx().Exec(deleteSQL, userID, msgID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
+
+	sendSuccess(w, nil)
+}
+
 func pushMessageToUser(msgID int64, userID int64) {
 	selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
 	msg := Message{}
@@ -172,7 +194,7 @@ func pushMessageToUser(msgID int64, userID int64) {
 
 	// if the payload is small, send the entire thing
 	if len(buf) <= 3584 {
-		log.Printf("payload: %s", buf)
+		// log.Printf("payload: %s", buf)
 		sendFirebaseMessage(userID, msgMap)
 		return
 	}
@@ -182,47 +204,4 @@ func pushMessageToUser(msgID int64, userID int64) {
 		Type      string `json:"type"`
 		MessageID string `json:"message_id"`
 	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msgID, 10)})
-}
-
-// editMessageHandler handles PUT /messages/{msg_id}/processed
-func editMessageHandler(w http.ResponseWriter, r *http.Request) {
-	ok, sessionUserID := verifySession(w, r)
-	if !ok {
-		return
-	}
-
-	msgIDStr := mux.Vars(r)["msg_id"]
-	msgID, err := strconv.Atoi(msgIDStr)
-	if err != nil {
-		sendBadReq(w, "message id is not a number")
-		return
-	}
-
-	// first, check if this message exists and if this user is the recipient
-	var foundID, recipientID int64
-	err = dbx().QueryRow("SELECT id, recipient_id FROM messages WHERE id=?", msgID).Scan(&foundID, &recipientID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// a lie. just don't want to tell them, in case they're not the recipient
-			sendBadReq(w, "can't load message")
-		} else {
-			sendInternalErr(w, err)
-		}
-		return
-	}
-
-	// make sure the caller is the message recipient
-	if recipientID != sessionUserID {
-		// a lie
-		sendBadReq(w, "can't load message")
-		return
-	}
-
-	_, err = dbx().Exec("UPDATE messages SET processed=1 WHERE id=?", foundID)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-
-	sendSuccess(w, nil)
 }

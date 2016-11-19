@@ -24,6 +24,7 @@ func main() {
 		"",
 		"DSN to SQL server e.g. username:password@protocol(address)/dbname?param=value")
 	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
+	backupsPath := flag.String("backups", "", "Path to store user database backup files")
 	flag.Parse()
 	Debug = *debug
 
@@ -41,6 +42,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error initializing key-value db: %v", err)
 	}
+
+	if *backupsPath == "" {
+		log.Fatal("user database backups path is empty")
+	}
+	userDBBackupFiles = *backupsPath
 
 	r := mux.NewRouter()
 	alphaRouter := r.PathPrefix("/alpha").Subrouter()
@@ -65,12 +71,14 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/users", newRESTFunc(createUserHandler)).Methods("POST")
 	r.Handle("/users/me/fcm-tokens", newRESTFunc(addFCMTokenHandler)).Methods("POST")
 	r.Handle("/users/me/fcm-tokens/{token}", newRESTFunc(deleteFCMTokenHandler)).Methods("DELETE")
+	r.Handle("/users/me/backup", newRESTFunc(retrieveBackupHandler)).Methods("GET")
+	r.Handle("/users/me/backup", newRESTFunc(saveBackupHandler)).Methods("PUT")
 	r.Handle("/users/{public_id}", newRESTFunc(getUserInfoHandler)).Methods("GET")
 	r.Handle("/users/{public_id}/messages", newRESTFunc(sendMessageToUserHandler)).Methods("POST")
 	r.Handle("/users/{public_id}/public-key", newRESTFunc(getUserPublicKeyHandler)).Methods("GET")
 
 	r.Handle("/messages", newRESTFunc(getMessagesHandler)).Methods("GET")
-	r.Handle("/messages/{msg_id}/processed", newRESTFunc(editMessageHandler)).Methods("PUT")
+	r.Handle("/messages/{message_id:[0-9]+}", newRESTFunc(deleteMessageHandler)).Methods("DELETE")
 
 	// this has to come first, so it has a chance to match before the box_id urls
 	r.Handle("/drop-boxes/watch", newRESTFunc(createPackageWatcherHandler)).Methods("GET")
@@ -85,8 +93,8 @@ func installEndPoints(r *mux.Router) {
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	pushMessageToUser(22, 16)
-	// sendFirebaseMessage(16, nil)
+	// pushMessageToUser(22, 16)
+	sendFirebaseMessage(16, nil)
 }
 
 func playground() {
