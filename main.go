@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,19 @@ import (
 // Debug contains whether the server is running in debug mode
 var Debug = false
 
+var defaultCiphers = []uint16{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+	tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+}
+
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
@@ -25,6 +39,8 @@ func main() {
 		"DSN to SQL server e.g. username:password@protocol(address)/dbname?param=value")
 	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
 	backupsPath := flag.String("backups", "", "Path to store user database backup files")
+	tlsKey := flag.String("tls-key", "", "Path to TLS key file")
+	tlsCert := flag.String("tls-cert", "", "Path to TLS cert file")
 	flag.Parse()
 	Debug = *debug
 
@@ -63,7 +79,17 @@ func main() {
 	}
 
 	log.Printf("Starting server on port %d", *port)
-	server.ListenAndServe()
+	if *tlsCert != "" && *tlsKey != "" {
+		tlsConfig := &tls.Config{}
+		tlsConfig.CipherSuites = defaultCiphers
+		tlsConfig.MinVersion = tls.VersionTLS12
+		tlsConfig.MaxVersion = tls.VersionTLS12
+		tlsConfig.PreferServerCipherSuites = true
+		server.TLSConfig = tlsConfig
+		log.Fatal(server.ListenAndServeTLS(*tlsCert, *tlsKey))
+	} else {
+		log.Fatal(server.ListenAndServe())
+	}
 }
 
 func installEndPoints(r *mux.Router) {
