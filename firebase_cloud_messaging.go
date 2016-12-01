@@ -48,7 +48,7 @@ type fcmMulticastMessage struct {
 	Data     interface{} `json:"data"`
 }
 
-func sendFirebaseMessage(userID int64, payload interface{}) {
+func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 	log.Printf("sendFirebaseMessage(%d)", userID)
 	rows, err := db().Query("SELECT token FROM user_fcm_tokens WHERE user_id=?", userID)
 	if err != nil {
@@ -70,7 +70,12 @@ func sendFirebaseMessage(userID int64, payload interface{}) {
 		log.Printf("  no tokens for %d", userID)
 		return
 	}
-	priority := "normal"
+	priority := ""
+	if urgent {
+		priority = "high"
+	} else {
+		priority = "normal"
+	}
 	var msg interface{}
 	if len(tokens) == 1 {
 		msg = fcmUnicastMessage{

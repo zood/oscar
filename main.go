@@ -120,7 +120,7 @@ func installEndPoints(r *mux.Router) {
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	// pushMessageToUser(22, 16)
-	sendFirebaseMessage(16, nil)
+	sendFirebaseMessage(16, nil, false)
 }
 
 func playground() {

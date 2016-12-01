@@ -80,6 +80,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	body := struct {
 		CipherText encodableBytes `json:"cipher_text"`
 		Nonce      encodableBytes `json:"nonce"`
+		Urgent     bool           `json:"urgent"`
 	}{}
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
@@ -103,7 +104,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 			logErr(err)
 			return
 		}
-		pushMessageToUser(msgID, userID)
+		pushMessageToUser(msgID, userID, body.Urgent)
 	}()
 }
 
@@ -165,7 +166,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(msgID int64, userID int64) {
+func pushMessageToUser(msgID int64, userID int64, urgent bool) {
 	selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
 	msg := Message{}
 	err := dbx().Get(&msg, selectSQL, msgID)
@@ -195,7 +196,7 @@ func pushMessageToUser(msgID int64, userID int64) {
 	// if the payload is small, send the entire thing
 	if len(buf) <= 3584 {
 		// log.Printf("payload: %s", buf)
-		sendFirebaseMessage(userID, msgMap)
+		sendFirebaseMessage(userID, msgMap, urgent)
 		return
 	}
 
@@ -203,5 +204,5 @@ func pushMessageToUser(msgID int64, userID int64) {
 	sendFirebaseMessage(userID, struct {
 		Type      string `json:"type"`
 		MessageID string `json:"message_id"`
-	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msgID, 10)})
+	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msgID, 10)}, urgent)
 }
