@@ -12,10 +12,7 @@ import (
 var userDBBackupFiles string
 
 func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
-	ok, userID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	userID := userIDFromContext(r.Context())
 
 	fileLoc := filepath.Join(userDBBackupFiles, strconv.FormatInt(userID, 10)+".db")
 	_, err := os.Stat(fileLoc)
@@ -39,10 +36,7 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
-	ok, userID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	userID := userIDFromContext(r.Context())
 
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {

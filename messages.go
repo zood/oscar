@@ -60,11 +60,7 @@ type Message struct {
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
 func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
-	// make sure the caller is legitimate
-	ok, sessionUserID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	sessionUserID := userIDFromContext(r.Context())
 
 	// make sure this user exists
 	userID, ok := parseUserID(w, r)
@@ -110,14 +106,11 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 
 // getMessagesHandler handles GET /messages
 func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
-	ok, sessionUserID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	userID := userIDFromContext(r.Context())
 
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
-	rows, err := dbx().Queryx(selectSQL, sessionUserID)
+	rows, err := dbx().Queryx(selectSQL, userID)
 	if err != nil {
 		logErr(err)
 		sendInternalErr(w, err)
@@ -142,16 +135,12 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 
 // handles DELETE /messages/{message_id}
 func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r.Context())
 	vars := mux.Vars(r)
 	msgIDStr := vars["message_id"]
 	msgID, err := strconv.ParseInt(msgIDStr, 10, 64)
 	if err != nil {
 		sendBadReq(w, "Invalid message id")
-		return
-	}
-
-	ok, userID := verifySession(w, r)
-	if !ok {
 		return
 	}
 

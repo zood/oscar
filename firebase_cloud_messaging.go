@@ -184,10 +184,7 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 }
 
 func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
-	ok, userID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	userID := userIDFromContext(r.Context())
 
 	body := struct {
 		Token string `json:"token"`
@@ -200,6 +197,7 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	if len(body.Token) == 0 {
 		sendBadReq(w, "missing 'token' field")
+		return
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
@@ -240,10 +238,7 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
-	ok, userID := verifySession(w, r)
-	if !ok {
-		return
-	}
+	userID := userIDFromContext(r.Context())
 
 	token := mux.Vars(r)["token"]
 

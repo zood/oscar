@@ -93,29 +93,29 @@ func main() {
 }
 
 func installEndPoints(r *mux.Router) {
-	r.Handle("/users", newRESTFunc(searchUsersHandler)).Methods("GET")
-	r.Handle("/users", newRESTFunc(createUserHandler)).Methods("POST")
-	r.Handle("/users/me/fcm-tokens", newRESTFunc(addFCMTokenHandler)).Methods("POST")
-	r.Handle("/users/me/fcm-tokens/{token}", newRESTFunc(deleteFCMTokenHandler)).Methods("DELETE")
-	r.Handle("/users/me/backup", newRESTFunc(retrieveBackupHandler)).Methods("GET")
-	r.Handle("/users/me/backup", newRESTFunc(saveBackupHandler)).Methods("PUT")
-	r.Handle("/users/{public_id}", newRESTFunc(getUserInfoHandler)).Methods("GET")
-	r.Handle("/users/{public_id}/messages", newRESTFunc(sendMessageToUserHandler)).Methods("POST")
-	r.Handle("/users/{public_id}/public-key", newRESTFunc(getUserPublicKeyHandler)).Methods("GET")
+	r.Handle("/users", logHandler(sessionHandler(http.HandlerFunc(searchUsersHandler)))).Methods("GET")
+	r.Handle("/users", logHandler(http.HandlerFunc(createUserHandler))).Methods("POST")
+	r.Handle("/users/me/fcm-tokens", logHandler(sessionHandler(http.HandlerFunc(addFCMTokenHandler)))).Methods("POST")
+	r.Handle("/users/me/fcm-tokens/{token}", logHandler(sessionHandler(http.HandlerFunc(deleteFCMTokenHandler)))).Methods("DELETE")
+	r.Handle("/users/me/backup", logHandler(sessionHandler(http.HandlerFunc(retrieveBackupHandler)))).Methods("GET")
+	r.Handle("/users/me/backup", logHandler(sessionHandler(http.HandlerFunc(saveBackupHandler)))).Methods("PUT")
+	r.Handle("/users/{public_id}", logHandler(sessionHandler(http.HandlerFunc(getUserInfoHandler)))).Methods("GET")
+	r.Handle("/users/{public_id}/messages", logHandler(sessionHandler(http.HandlerFunc(sendMessageToUserHandler)))).Methods("POST")
+	r.Handle("/users/{public_id}/public-key", logHandler(sessionHandler(http.HandlerFunc(getUserPublicKeyHandler)))).Methods("GET")
 
-	r.Handle("/messages", newRESTFunc(getMessagesHandler)).Methods("GET")
-	r.Handle("/messages/{message_id:[0-9]+}", newRESTFunc(deleteMessageHandler)).Methods("DELETE")
+	r.Handle("/messages", logHandler(sessionHandler(http.HandlerFunc(getMessagesHandler)))).Methods("GET")
+	r.Handle("/messages/{message_id:[0-9]+}", logHandler(sessionHandler(http.HandlerFunc(deleteMessageHandler)))).Methods("DELETE")
 
 	// this has to come first, so it has a chance to match before the box_id urls
-	r.Handle("/drop-boxes/watch", newRESTFunc(createPackageWatcherHandler)).Methods("GET")
-	r.Handle("/drop-boxes/{box_id}", newRESTFunc(pickUpPackageHandler)).Methods("GET")
-	r.Handle("/drop-boxes/{box_id}", newRESTFunc(dropPackageHandler)).Methods("PUT")
+	r.Handle("/drop-boxes/watch", logHandler(sessionHandler(http.HandlerFunc(createPackageWatcherHandler)))).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(http.HandlerFunc(pickUpPackageHandler)))).Methods("GET")
+	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(http.HandlerFunc(dropPackageHandler)))).Methods("PUT")
 
-	r.Handle("/sessions/{username}/challenge", newRESTFunc(createAuthChallengeHandler)).Methods("POST")
-	r.Handle("/sessions/{username}/challenge-response", newRESTFunc(authChallengeResponseHandler)).Methods("POST")
+	r.Handle("/sessions/{username}/challenge", logHandler(http.HandlerFunc(createAuthChallengeHandler))).Methods("POST")
+	r.Handle("/sessions/{username}/challenge-response", logHandler(http.HandlerFunc(authChallengeResponseHandler))).Methods("POST")
 
-	r.Handle("/goroutine-stacks", newRESTFunc(goroutineStacksHandler)).Methods("GET")
-	r.Handle("/test", newRESTFunc(testHandler)).Methods("GET")
+	r.Handle("/goroutine-stacks", logHandler(http.HandlerFunc(goroutineStacksHandler))).Methods("GET")
+	r.Handle("/test", logHandler(http.HandlerFunc(testHandler))).Methods("GET")
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {

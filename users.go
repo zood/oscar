@@ -237,11 +237,6 @@ func createUser(user User) ([]byte, *serverError) {
 
 // getUserPublicKeyHandler handles GET /users/{public_id}/public-key
 func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	userID, ok := parseUserID(w, r)
 	if !ok {
 		return
@@ -264,11 +259,6 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 // searchUsersHandler handles GET /users
 func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	username := r.URL.Query().Get("username")
 	username = strings.TrimSpace(username)
 	username = strings.ToLower(username)
@@ -288,11 +278,6 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	userID, ok := parseUserID(w, r)
 	if !ok {
 		return

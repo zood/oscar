@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	crand "crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -42,30 +43,37 @@ func newAccessToken(userID int64) (string, error) {
 	return token, nil
 }
 
-func verifySession(w http.ResponseWriter, r *http.Request) (authenticated bool, userID int64) {
-	token := r.Header.Get("X-Oscar-Access-Token")
-	if token == "" {
-		authenticated = false
-		sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
+func userIDFromContext(ctx context.Context) int64 {
+	return ctx.Value(contextUserIDKey).(int64)
+}
+
+func sessionHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("X-Oscar-Access-Token")
+		if token == "" {
+			sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
+			return
+		}
+
+		selectSQL := `SELECT user_id FROM sessions WHERE access_token=?`
+		var userID int64
+		err := dbx().QueryRow(selectSQL, token).Scan(&userID)
+		if err == nil {
+			ctx := context.WithValue(r.Context(), contextUserIDKey, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		// check if this was a simple 'not found' or a more serious error
+		if err != sql.ErrNoRows {
+			logErr(err)
+			sendInternalErr(w, err)
+		} else {
+			sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
+		}
+
 		return
-	}
-
-	selectSQL := `SELECT user_id FROM sessions WHERE access_token=?`
-	err := dbx().QueryRow(selectSQL, token).Scan(&userID)
-	if err == nil {
-		authenticated = true
-		return
-	}
-
-	// check if this was a simple 'not found' or a more serious error
-	if err != sql.ErrNoRows {
-		logErr(err)
-		sendInternalErr(w, err)
-	} else {
-		sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
-	}
-
-	return false, 0
+	})
 }
 
 func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {

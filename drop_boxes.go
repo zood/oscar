@@ -156,11 +156,6 @@ func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, string, boo
 
 // pickUpPackageHandler handles GET /drop-boxes/{box_id}
 func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	boxID, _, ok := parseDropBoxID(w, r)
 	if !ok {
 		return
@@ -182,11 +177,6 @@ func pickUpPackage(boxID []byte) []byte {
 
 // dropPackageHandler handles POST /drop-boxes/{box_id}
 func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	boxID, hexBoxID, ok := parseDropBoxID(w, r)
 	if !ok {
 		return
@@ -213,11 +203,6 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
-	ok, _ := verifySession(w, r)
-	if !ok {
-		return
-	}
-
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
