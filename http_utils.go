@@ -9,8 +9,8 @@ import (
 	"runtime"
 )
 
-func logHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func logHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if Debug {
 			log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)
 		}
@@ -26,36 +26,8 @@ func logHandler(next http.Handler) http.Handler {
 		}()
 
 		next.ServeHTTP(w, r)
-	})
-}
-
-/*
-type restFunc struct {
-	f http.HandlerFunc
-}
-
-func (rf *restFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if Debug {
-		log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)
 	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			s := make([]byte, 2048)
-			numBytes := runtime.Stack(s, false)
-			stack := s[:numBytes]
-			err := fmt.Errorf("recovered - %v\n%s", r, string(stack))
-			sendInternalErr(w, err)
-		}
-	}()
-
-	rf.f(w, r)
 }
-
-func newRESTFunc(f func(http.ResponseWriter, *http.Request)) http.Handler {
-	return &restFunc{f: f}
-}
-*/
 
 func sendResponse(w http.ResponseWriter, response interface{}, httpCode int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

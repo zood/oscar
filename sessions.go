@@ -47,8 +47,8 @@ func userIDFromContext(ctx context.Context) int64 {
 	return ctx.Value(contextUserIDKey).(int64)
 }
 
-func sessionHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Oscar-Access-Token")
 		if token == "" {
 			sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
@@ -73,7 +73,7 @@ func sessionHandler(next http.Handler) http.Handler {
 		}
 
 		return
-	})
+	}
 }
 
 func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
