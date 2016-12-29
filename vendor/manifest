@@ -58,6 +58,24 @@
 			"notests": true
 		},
 		{
+			"importpath": "golang.org/x/crypto/acme",
+			"repository": "https://go.googlesource.com/crypto",
+			"vcs": "git",
+			"revision": "f6b343c37ca80bfa8ea539da67a0b621f84fab1d",
+			"branch": "master",
+			"path": "acme",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/net/context",
+			"repository": "https://go.googlesource.com/net",
+			"vcs": "git",
+			"revision": "45e771701b814666a7eb299e6c7a57d0b1799e91",
+			"branch": "master",
+			"path": "context",
+			"notests": true
+		},
+		{
 			"importpath": "golang.org/x/sys/unix",
 			"repository": "https://go.googlesource.com/sys",
 			"vcs": "git",

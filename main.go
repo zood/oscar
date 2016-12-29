@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/crypto/acme/autocert"
+
 	"github.com/gorilla/mux"
 )
 
@@ -27,7 +29,7 @@ var defaultCiphers = []uint16{
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-	port := flag.Int("port", 80, "Listening port for server")
+	port := flag.Int("port", 443, "Listening port for server")
 	debug := flag.Bool("debug", false, "Enables additional log output")
 	sqlDSN := flag.String(
 		"sqldsn",
@@ -35,8 +37,7 @@ func main() {
 		"DSN to SQL server e.g. username:password@protocol(address)/dbname?param=value")
 	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
 	backupsPath := flag.String("backups", "", "Path to store user database backup files")
-	tlsKey := flag.String("tls-key", "", "Path to TLS key file")
-	tlsCert := flag.String("tls-cert", "", "Path to TLS cert file")
+	tlsEnabled := flag.Bool("tls", true, "Enable/disable TLS")
 	flag.Parse()
 	Debug = *debug
 
@@ -75,7 +76,7 @@ func main() {
 	}
 
 	log.Printf("Starting server on port %d", *port)
-	if *tlsCert != "" && *tlsKey != "" {
+	if *tlsEnabled {
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers
 		tlsConfig.MinVersion = tls.VersionTLS12
@@ -84,8 +85,14 @@ func main() {
 			tls.CurveP256,
 			//tls.X25519, // Go 1.8 only
 		}
+		m := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist("api.pijun.io"),
+			Cache:      autocert.DirCache("./"),
+		}
+		tlsConfig.GetCertificate = m.GetCertificate
 		server.TLSConfig = tlsConfig
-		log.Fatal(server.ListenAndServeTLS(*tlsCert, *tlsKey))
+		log.Fatal(server.ListenAndServeTLS("", ""))
 	} else {
 		log.Fatal(server.ListenAndServe())
 	}
