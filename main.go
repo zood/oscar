@@ -71,8 +71,9 @@ func main() {
 	server := http.Server{
 		Addr:         hostAddress,
 		Handler:      r,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		// IdleTimeout:  120 * time.Second,	// Go 1.8
 	}
 
 	log.Printf("Starting server on port %d", *port)
