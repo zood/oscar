@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -32,48 +31,15 @@ var defaultCiphers = []uint16{
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-	port := flag.Int("port", 443, "Listening port for server")
 	debug := flag.Bool("debug", false, "Enables additional log output")
-	sqlDSN := flag.String(
-		"sqldsn",
-		"",
-		"DSN to SQL server e.g. username:password@protocol(address)/dbname?param=value")
-	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
-	backupsPath := flag.String("backups", "", "Path to store user database backup files")
-	tlsEnabled := flag.Bool("tls", true, "Enable/disable TLS")
-	asymKeysPath := flag.String("asym-keys", "", "Path to file containing libsodium generated public and private keys")
-	symKeyPath := flag.String("sym-key", "", "Path to file containing the symmetric crypto key")
+	configPath := flag.String("config", "", "Path to config file")
 	flag.Parse()
 	Debug = *debug
 
-	err := initAsymmetricKeys(*asymKeysPath)
+	port, tlsEnabled, err := applyConfigFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = initSymmetricKey(*symKeyPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	gFCMServerKey = os.Getenv("FCM_SERVER_KEY")
-	if gFCMServerKey == "" {
-		log.Fatal("$FCM_SERVER_KEY is missing/empty")
-	}
-
-	err = initDB(*sqlDSN)
-	if err != nil {
-		log.Fatalf("Error initializing SQL db: %v", err)
-	}
-
-	err = initKVDB(*kvDBPath)
-	if err != nil {
-		log.Fatalf("Error initializing key-value db: %v", err)
-	}
-
-	if *backupsPath == "" {
-		log.Fatal("user database backups path is empty")
-	}
-	userDBBackupFiles = *backupsPath
 
 	r := mux.NewRouter()
 	alphaRouter := r.PathPrefix("/alpha").Subrouter()
@@ -81,7 +47,7 @@ func main() {
 
 	// playground()
 
-	hostAddress := fmt.Sprintf(":%d", *port)
+	hostAddress := fmt.Sprintf(":%d", port)
 	server := http.Server{
 		Addr:         hostAddress,
 		Handler:      r,
@@ -90,8 +56,8 @@ func main() {
 		// IdleTimeout:  120 * time.Second,	// Go 1.8
 	}
 
-	log.Printf("Starting server on port %d", *port)
-	if *tlsEnabled {
+	log.Printf("Starting server on port %d", port)
+	if tlsEnabled {
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers
 		tlsConfig.MinVersion = tls.VersionTLS12
