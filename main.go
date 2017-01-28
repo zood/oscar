@@ -2,6 +2,9 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -38,15 +41,26 @@ func main() {
 	kvDBPath := flag.String("kvdb", "", "Path to key-value database file")
 	backupsPath := flag.String("backups", "", "Path to store user database backup files")
 	tlsEnabled := flag.Bool("tls", true, "Enable/disable TLS")
+	asymKeysPath := flag.String("asym-keys", "", "Path to file containing libsodium generated public and private keys")
+	symKeyPath := flag.String("sym-key", "", "Path to file containing the symmetric crypto key")
 	flag.Parse()
 	Debug = *debug
+
+	err := initAsymmetricKeys(*asymKeysPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = initSymmetricKey(*symKeyPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	gFCMServerKey = os.Getenv("FCM_SERVER_KEY")
 	if gFCMServerKey == "" {
 		log.Fatal("$FCM_SERVER_KEY is missing/empty")
 	}
 
-	err := initDB(*sqlDSN)
+	err = initDB(*sqlDSN)
 	if err != nil {
 		log.Fatalf("Error initializing SQL db: %v", err)
 	}
@@ -118,6 +132,8 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(pickUpPackageHandler))).Methods("GET")
 	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(dropPackageHandler))).Methods("PUT")
 
+	r.Handle("/public-key", logHandler(getServerPublicKeyHandler)).Methods("GET")
+
 	r.Handle("/sessions/{username}/challenge", logHandler(createAuthChallengeHandler)).Methods("POST")
 	r.Handle("/sessions/{username}/challenge-response", logHandler(authChallengeResponseHandler)).Methods("POST")
 
@@ -131,11 +147,53 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func playground() {
-	// rdr := bytes.NewReader([]byte{'w', 'o', 'r', 'd'})
-	// var token string
-	// err := json.NewDecoder(rdr).Decode(&token)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// log.Printf("decoded: %v", token)
+	/*
+		{
+			"n": "arash",
+			"iat": // unix epoch time
+			"eat": // base64(ec256(iat))
+		}
+	*/
+
+	serverSecretKey, _ := hex.DecodeString("e1daa9c01ac0684cd137a76b94984872c6e2c82ac50a1eb55919656758fdc022")
+	// log.Printf("server secret key: %s", hex.EncodeToString(serverSecretKey))
+
+	now := time.Unix(1485481237, 0)
+	// log.Printf("unix time: %v", now.Unix())
+
+	serverKeyPair := keyPair{}
+	serverKeyPair.public, _ = hex.DecodeString("e899018b82d5d7279591a17bfcf83654ab9b53f233eb524ff5d3d9aabeb94c7d")
+	serverKeyPair.secret, _ = hex.DecodeString("2c66b081340f716737e7a5aaadbf27cf1899bf5b135f3c9c9d42e452178b1340")
+	// log.Printf("server keypair: %v", serverKeyPair)
+
+	clientKeyPair := keyPair{}
+	clientKeyPair.public, _ = hex.DecodeString("bc763beacf24618791e7585ecefce49374a7f58687a2d7fa893e99e8d007854b")
+	clientKeyPair.secret, _ = hex.DecodeString("8b60969ccf00d52332b9fcea10da551a4bb1c7c2d3c12e36a602dedf35945016")
+	// log.Printf("client keypair: %v", clientKeyPair)
+
+	nowBytes := int64ToBytes(now.Unix())
+	ct, nonce, err := publicKeyEncrypt(nowBytes, serverKeyPair.public, clientKeyPair.secret)
+	// log.Printf("ct: %s, n: %s, err: %v", hex.EncodeToString(ct), hex.EncodeToString(nonce), err)
+	tokenStruct := struct {
+		Name string         `json:"n"`
+		IAT  int64          `json:"iat"`
+		EAT  encodableBytes `json:"eat"`
+	}{
+		Name: "arashpayan",
+		IAT:  now.Unix(),
+		EAT:  append(nonce, ct...),
+	}
+	tokenJSON, err := json.Marshal(tokenStruct)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// log.Printf("tokenJSON: %s", tokenJSON)
+
+	tct, tno, err := symmetricKeyEncrypt(tokenJSON, serverSecretKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// log.Printf("tct: %s, tno: %s, err: %v", hex.EncodeToString(tct), hex.EncodeToString(tno), err)
+	eToken := append(tno, tct...)
+	log.Printf("etoken length: %d, etoken base64 len: %d", len(eToken), len(base64.StdEncoding.EncodeToString(eToken)))
 }
