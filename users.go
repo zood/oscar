@@ -100,15 +100,10 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	userID := userIDFromPubID(pubID)
 
-	token, err := newAccessToken(userID)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-
-	sendSuccess(w, loginResponse{ID: pubID, AccessToken: token})
+	sendSuccess(w, struct {
+		ID encodableBytes `json:"id"`
+	}{ID: pubID})
 }
 
 func createUser(user User) ([]byte, *serverError) {

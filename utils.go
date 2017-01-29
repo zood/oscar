@@ -51,3 +51,14 @@ func bytesToInt64(b []byte) int64 {
 
 	return i
 }
+
+func bytesToInt64Err(b []byte) (int64, error) {
+	var i int64
+	buf := bytes.NewReader(b)
+	err := binary.Read(buf, binary.LittleEndian, &i)
+	if err != nil {
+		return 0, err
+	}
+
+	return i, nil
+}

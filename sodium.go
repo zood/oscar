@@ -104,24 +104,6 @@ func publicKeyDecrypt(cipherText, nonce, senderPublicKey, receiverSecretKey []by
 	return msg, true
 }
 
-/*
-func publicKeyEncryptUnauthenticated(msg, publicKey []byte) (cipherText []byte, err error) {
-	cipherText = make([]byte, C.crypto_box_SEALBYTES+len(msg))
-	result := C.crypto_box_seal(
-		(*C.uchar)(&cipherText[0]),
-		(*C.uchar)(&msg[0]),
-		C.ulonglong(len(msg)),
-		(*C.uchar)(&publicKey[0]))
-	if result != 0 {
-		return nil, fmt.Errorf("unknown error in crypto_box_seal (%d)", result)
-	}
-
-	return cipherText, nil
-}
-*/
-
-// func publicKeyDecryptUnauthenticated(cipherText)
-
 func symmetricKeyEncrypt(msg, key []byte) (cipherText, nonce []byte, err error) {
 	cipherText = make([]byte, len(msg)+secretBoxMACSize)
 	nonce = make([]byte, secretBoxNonceSize)
