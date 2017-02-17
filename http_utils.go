@@ -55,11 +55,11 @@ func sendBadReqCode(w http.ResponseWriter, msg string, apiCode ErrCode) {
 }
 
 func sendBadReq(w http.ResponseWriter, msg string) {
-	sendBadReqCode(w, msg, ErrorBadRequest)
+	sendBadReqCode(w, msg, errorBadRequest)
 }
 
 func sendInternalErr(w http.ResponseWriter, err error) {
-	sendErr(w, "Internal server error", http.StatusInternalServerError, ErrorInternal)
+	sendErr(w, "Internal server error", http.StatusInternalServerError, errorInternal)
 
 	if err != nil {
 		_, file, line, ok := runtime.Caller(1)

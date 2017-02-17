@@ -77,7 +77,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Token == "" {
-		sendBadReqCode(w, "Missing verification token", ErrorBadRequest)
+		sendBadReqCode(w, "Missing verification token", errorBadRequest)
 	}
 
 	querySQL := fmt.Sprintf("SELECT user_id, email, send_date FROM %s WHERE token=?", tableEmailVerificationTokens)
@@ -88,7 +88,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	switch err {
 	case nil:
 	case sql.ErrNoRows:
-		sendBadReqCode(w, "Invalid token", ErrorMissingVerificationToken)
+		sendBadReqCode(w, "Invalid token", errorMissingVerificationToken)
 		return
 	default:
 		sendInternalErr(w, err)
@@ -128,7 +128,7 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	token := vars["token"]
 	if token == "" {
-		sendBadReqCode(w, "Invalid token", ErrorMissingVerificationToken)
+		sendBadReqCode(w, "Invalid token", errorMissingVerificationToken)
 		return
 	}
 

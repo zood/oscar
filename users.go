@@ -41,7 +41,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	pubIDStr := vars["public_id"]
 	pubID, err := hex.DecodeString(pubIDStr)
 	if err != nil {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), errorUserNotFound)
 		return 0, false
 	}
 
@@ -51,13 +51,13 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return nil
 	})
 	if idBytes == nil {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), errorUserNotFound)
 		return 0, false
 	}
 
 	id := bytesToInt64(idBytes)
 	if id < 0 {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), ErrorUserNotFound)
+		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), errorUserNotFound)
 		return 0, false
 	}
 
@@ -95,7 +95,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	pubID, sErr := createUser(user)
 	if sErr != nil {
-		if sErr.code == ErrorInternal {
+		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
 		} else {
 			sendBadReqCode(w, sErr.message, sErr.code)
@@ -111,58 +111,58 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 func createUser(user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
-		return nil, &serverError{code: ErrorInvalidUsername, message: "Username can not be empty"}
+		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
 	}
 	if !validUsernamePattern.MatchString(user.Username) {
-		return nil, &serverError{code: ErrorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain letters (a-z) or numbers (0-9)."}
+		return nil, &serverError{code: errorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain letters (a-z) or numbers (0-9)."}
 	}
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
-		return nil, &serverError{code: ErrorInvalidPasswordSalt, message: "Invalid password salt"}
+		return nil, &serverError{code: errorInvalidPasswordSalt, message: "Invalid password salt"}
 	}
 	if user.PasswordHashOperationsLimit < argon2iOpsLimitInteractive {
-		return nil, &serverError{code: ErrorArgon2iOpsLimitTooLow, message: "Password hash ops limit is too low"}
+		return nil, &serverError{code: errorArgon2iOpsLimitTooLow, message: "Password hash ops limit is too low"}
 	}
 	if user.PasswordHashMemoryLimit < argon2iMemLimitInteractive {
-		return nil, &serverError{code: ErrorArgon2iMemLimitTooLow, message: "Password hash mem limit is too low"}
+		return nil, &serverError{code: errorArgon2iMemLimitTooLow, message: "Password hash mem limit is too low"}
 	}
 	if user.PublicKey == nil || len(user.PublicKey) != publicKeySize {
 		return nil, &serverError{
-			code:    ErrorInvalidPublicKey,
+			code:    errorInvalidPublicKey,
 			message: fmt.Sprintf("Invalid public key. Expected %d bytes. Found %d.", publicKeySize, len(user.PublicKey)),
 		}
 	}
 	if user.WrappedSecretKey == nil || len(user.WrappedSecretKey) == 0 {
-		return nil, &serverError{code: ErrorInvalidWrappedSecretKey, message: "Invalid wrapped secret key"}
+		return nil, &serverError{code: errorInvalidWrappedSecretKey, message: "Invalid wrapped secret key"}
 	}
 	if user.WrappedSecretKeyNonce == nil || len(user.WrappedSecretKeyNonce) == 0 {
-		return nil, &serverError{code: ErrorInvalidWrappedSecretKeyNonce, message: "Invalid wrapped secret key nonce"}
+		return nil, &serverError{code: errorInvalidWrappedSecretKeyNonce, message: "Invalid wrapped secret key nonce"}
 	}
 	if user.WrappedSymmetricKey == nil || len(user.WrappedSymmetricKey) == 0 {
-		return nil, &serverError{code: ErrorInvalidWrappedSymmetricKey, message: "Invalid wrapped symmetric key"}
+		return nil, &serverError{code: errorInvalidWrappedSymmetricKey, message: "Invalid wrapped symmetric key"}
 	}
 	if user.WrappedSymmetricKeyNonce == nil || len(user.WrappedSymmetricKeyNonce) == 0 {
-		return nil, &serverError{code: ErrorInvalidWrappedSymmetricKeyNonce, message: "Invalid wrapped symmetric key nonce"}
+		return nil, &serverError{code: errorInvalidWrappedSymmetricKeyNonce, message: "Invalid wrapped symmetric key nonce"}
 	}
 	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
 	var emailVerificationToken *string
 	if user.Email != "" {
 		if len(user.Email) > 254 {
-			return nil, &serverError{code: ErrorInvalidEmail, message: "Email address is too long"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Email address is too long"}
 		}
 		parts := strings.Split(user.Email, "@")
 		if len(parts) != 2 {
-			return nil, &serverError{code: ErrorInvalidEmail, message: "Email address doesn't have a user and domain separated by an '@'"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Email address doesn't have a user and domain separated by an '@'"}
 		}
 		if parts[0] == "" {
-			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid user component in email"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Invalid user component in email"}
 		}
 		domainParts := strings.Split(parts[1], ".")
 		if len(domainParts) < 2 {
-			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid domain in email address"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Invalid domain in email address"}
 		}
 		tld := domainParts[len(domainParts)-1]
 		if len(tld) < 2 {
-			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid tld in domain"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Invalid tld in domain"}
 		}
 
 		// everything looks good, so let's generate a verification token
@@ -175,7 +175,7 @@ func createUser(user User) ([]byte, *serverError) {
 	var foundID int
 	err := dbx().QueryRow(checkUsernameSQL, user.Username).Scan(&foundID)
 	if err == nil {
-		return nil, &serverError{code: ErrorUsernameNotAvailable, message: "That username is already in use"}
+		return nil, &serverError{code: errorUsernameNotAvailable, message: "That username is already in use"}
 	}
 
 	insertSQL := `
@@ -324,7 +324,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 		user.Username = username
 		sendSuccess(w, user)
 	case sql.ErrNoRows:
-		sendNotFound(w, "user not found", ErrorUserNotFound)
+		sendNotFound(w, "user not found", errorUserNotFound)
 	default:
 		sendInternalErr(w, err)
 	}

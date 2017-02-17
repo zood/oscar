@@ -45,7 +45,7 @@ func userIDFromContext(ctx context.Context) int64 {
 }
 
 func sendInvalidAccessToken(w http.ResponseWriter) {
-	sendBadReqCode(w, "invalid access token", ErrorInvalidAccessToken)
+	sendBadReqCode(w, "invalid access token", errorInvalidAccessToken)
 }
 
 func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
@@ -143,7 +143,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	err := dbx().Get(&user, selectSQL, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendNotFound(w, "user not found", ErrorUserNotFound)
+			sendNotFound(w, "user not found", errorUserNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}
@@ -204,7 +204,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	err = dbx().QueryRow(userSQL, username).Scan(&userID, &userPubKey, &wrappedSymKey, &wrappedSymKeyNonce)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendNotFound(w, "unknown user", ErrorUserNotFound)
+			sendNotFound(w, "unknown user", errorUserNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}
@@ -218,7 +218,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	err = dbx().QueryRowx(challengeSQL, userID).StructScan(&challenge)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			sendNotFound(w, "challenge not found", ErrorChallengeNotFound)
+			sendNotFound(w, "challenge not found", errorChallengeNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}
@@ -227,31 +227,31 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if the challenge was created most than 2 minutes ago, then consider it expired
 	if (time.Now().Unix() - challenge.CreationDate) > 120 {
-		sendBadReqCode(w, "challenge expired", ErrorChallengeExpired)
+		sendBadReqCode(w, "challenge expired", errorChallengeExpired)
 		go deleteChallenge(challenge.ID)
 		return
 	}
 
 	decryptedChallenge, ok := publicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, userPubKey, oscarKeyPair.secret)
 	if !ok {
-		sendErr(w, "login failed", http.StatusUnauthorized, ErrorLoginFailed)
+		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}
 	// compare the decrypted message with the challenge we sent the user
 	if !bytes.Equal(decryptedChallenge, challenge.Challenge) {
 		// this is not what we wanted them to encrypt
-		sendErr(w, "login failed", http.StatusUnauthorized, ErrorLoginFailed)
+		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}
 
 	decryptedCreationDate, ok := publicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, userPubKey, oscarKeyPair.secret)
 	if !ok {
-		sendErr(w, "login failed", http.StatusUnauthorized, ErrorLoginFailed)
+		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}
 	// compare the decrypted creation date with the original
 	if !bytes.Equal(decryptedCreationDate, int64ToBytes(challenge.CreationDate)) {
-		sendErr(w, "login failed", http.StatusUnauthorized, ErrorLoginFailed)
+		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}
 

@@ -18,7 +18,7 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Stat(fileLoc)
 	if err != nil {
 		if os.IsNotExist(err) {
-			sendNotFound(w, "no backup found", ErrorBackupNotFound)
+			sendNotFound(w, "no backup found", errorBackupNotFound)
 		} else {
 			sendInternalErr(w, err)
 		}

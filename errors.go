@@ -12,29 +12,29 @@ type ErrCode int
 
 // Errors used throughout this package
 const (
-	ErrorNone                            ErrCode = 0
-	ErrorInternal                                = 1
-	ErrorBadRequest                              = 2
-	ErrorInvalidUsername                         = 3
-	ErrorInvalidPublicKey                        = 4
-	ErrorInvalidWrappedSecretKey                 = 5
-	ErrorInvalidWrappedSecretKeyNonce            = 6
-	ErrorInvalidWrappedSymmetricKey              = 7
-	ErrorInvalidWrappedSymmetricKeyNonce         = 8
-	ErrorInvalidPasswordSalt                     = 9
-	ErrorUsernameNotAvailable                    = 10
-	ErrorNotFound                                = 11
-	ErrorInsufficientPermission                  = 12
-	ErrorArgon2iOpsLimitTooLow                   = 13
-	ErrorArgon2iMemLimitTooLow                   = 14
-	ErrorInvalidAccessToken                      = 15
-	ErrorUserNotFound                            = 16
-	ErrorChallengeNotFound                       = 17
-	ErrorChallengeExpired                        = 18
-	ErrorLoginFailed                             = 19
-	ErrorBackupNotFound                          = 20
-	ErrorInvalidEmail                            = 21
-	ErrorMissingVerificationToken                = 22
+	errorNone                            ErrCode = 0
+	errorInternal                                = 1
+	errorBadRequest                              = 2
+	errorInvalidUsername                         = 3
+	errorInvalidPublicKey                        = 4
+	errorInvalidWrappedSecretKey                 = 5
+	errorInvalidWrappedSecretKeyNonce            = 6
+	errorInvalidWrappedSymmetricKey              = 7
+	errorInvalidWrappedSymmetricKeyNonce         = 8
+	errorInvalidPasswordSalt                     = 9
+	errorUsernameNotAvailable                    = 10
+	errorNotFound                                = 11
+	errorInsufficientPermission                  = 12
+	errorArgon2iOpsLimitTooLow                   = 13
+	errorArgon2iMemLimitTooLow                   = 14
+	errorInvalidAccessToken                      = 15
+	errorUserNotFound                            = 16
+	errorChallengeNotFound                       = 17
+	errorChallengeExpired                        = 18
+	errorLoginFailed                             = 19
+	errorBackupNotFound                          = 20
+	errorInvalidEmail                            = 21
+	errorMissingVerificationToken                = 22
 )
 
 type serverError struct {
@@ -51,7 +51,7 @@ func (err serverError) String() string {
 }
 
 func newInternalErr() *serverError {
-	return &serverError{code: ErrorInternal, message: "Internal server error"}
+	return &serverError{code: errorInternal, message: "Internal server error"}
 }
 
 func logErr(err error) {
