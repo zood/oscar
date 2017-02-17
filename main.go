@@ -1,9 +1,8 @@
 package main
 
 import (
-	crand "crypto/rand"
+	"bytes"
 	"crypto/tls"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -21,8 +20,8 @@ var Debug = false
 var defaultCiphers = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	// tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, // Go 1.8 only
-	// tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,   // Go 1.8 only
+	tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+	tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 }
@@ -44,15 +43,16 @@ func main() {
 	alphaRouter := r.PathPrefix("/alpha").Subrouter()
 	installEndPoints(alphaRouter)
 
-	playground()
+	// playground()
 
 	hostAddress := fmt.Sprintf(":%d", port)
 	server := http.Server{
 		Addr:         hostAddress,
 		Handler:      r,
+		ErrorLog:     log.New(&tlsHandshakeFilter{}, "", 0),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		// IdleTimeout:  120 * time.Second,	// Go 1.8
+		IdleTimeout:  120 * time.Second,
 	}
 
 	log.Printf("Starting server on port %d", port)
@@ -63,7 +63,7 @@ func main() {
 		tlsConfig.PreferServerCipherSuites = true
 		tlsConfig.CurvePreferences = []tls.CurveID{
 			tls.CurveP256,
-			//tls.X25519, // Go 1.8 only
+			tls.X25519,
 		}
 		m := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
@@ -102,6 +102,9 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/sessions/{username}/challenge", logHandler(createAuthChallengeHandler)).Methods("POST")
 	r.Handle("/sessions/{username}/challenge-response", logHandler(finishAuthChallengeHandler)).Methods("POST")
 
+	r.Handle("/email-verifications", logHandler(verifyEmailHandler)).Methods("POST")
+	r.Handle("/email-verifications/{token}", logHandler(disavowEmailHandler)).Methods("DELETE")
+
 	r.Handle("/goroutine-stacks", logHandler(goroutineStacksHandler)).Methods("GET")
 	r.Handle("/test", logHandler(testHandler)).Methods("GET")
 }
@@ -111,14 +114,18 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	sendFirebaseMessage(16, nil, false)
 }
 
-func playground() {
-	symKey := make([]byte, secretBoxKeySize)
-	crand.Read(symKey)
-	log.Printf("symKey: %s", hex.EncodeToString(symKey))
+type tlsHandshakeFilter struct{}
 
-	skp, err := generateKeyPair()
-	if err != nil {
-		log.Fatal(err)
+func (dl *tlsHandshakeFilter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("TLS handshake error from")) {
+		return len(p), nil // lie to the caller
 	}
-	log.Printf("server keypair: %v", skp)
+
+	log.Printf("%s", p)
+	return len(p), nil
+}
+
+func playground() {
+	// err := sendEmail("arash@ara.sh", "noreply@pijun.io", "Hello, world", "This is the best!")
+	// log.Printf("Error sending gmail: %v", err)
 }

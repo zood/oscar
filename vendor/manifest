@@ -91,6 +91,22 @@
 			"branch": "master",
 			"path": "/unix",
 			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/alexcesaro/quotedprintable.v3",
+			"repository": "https://gopkg.in/alexcesaro/quotedprintable.v3",
+			"vcs": "git",
+			"revision": "2caba252f4dc53eaf6b553000885530023f54623",
+			"branch": "v3",
+			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/gomail.v2",
+			"repository": "https://gopkg.in/gomail.v2",
+			"vcs": "git",
+			"revision": "81ebce5c23dfd25c6c67194b37d3dd3f338c98b1",
+			"branch": "v2",
+			"notests": true
 		}
 	]
 }

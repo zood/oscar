@@ -21,6 +21,12 @@ type configuration struct {
 	BackupsPath  string `json:"backups_path"`
 	FCMServerKey string `json:"fcm_server_key"`
 	TLS          *bool  `json:"tls,omitempty"`
+	Email        struct {
+		SMTPUser     string `json:"smtp_user"`
+		SMTPPassword string `json:"smtp_password"`
+		SMTPServer   string `json:"smtp_server"`
+		SMTPPort     int    `json:"smtp_port"`
+	}
 }
 
 func applyConfigFile(confPath string) (port int, tls bool, err error) {
@@ -83,6 +89,7 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 	}
 	userDBBackupFiles = conf.BackupsPath
 
+	// TLS info
 	if conf.Port == nil {
 		port := 443
 		conf.Port = &port
@@ -92,6 +99,12 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 		tls := true
 		conf.TLS = &tls
 	}
+
+	// SMTP client info
+	emailConfiguration.smtpUser = conf.Email.SMTPUser
+	emailConfiguration.smtpPassword = conf.Email.SMTPPassword
+	emailConfiguration.smtpServer = conf.Email.SMTPServer
+	emailConfiguration.smtpPort = conf.Email.SMTPPort
 
 	return *conf.Port, *conf.TLS, nil
 }

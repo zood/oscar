@@ -33,6 +33,8 @@ const (
 	ErrorChallengeExpired                        = 18
 	ErrorLoginFailed                             = 19
 	ErrorBackupNotFound                          = 20
+	ErrorInvalidEmail                            = 21
+	ErrorMissingVerificationToken                = 22
 )
 
 type serverError struct {

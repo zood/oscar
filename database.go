@@ -19,11 +19,11 @@ DELETE FROM users;
 */
 
 const (
-	tableMessages          string = "messages"
-	tableSessionChallenges        = "session_challenges"
-	tableSessions                 = "sessions"
-	tableUserFCMTokens            = "user_fcm_tokens"
-	tableUsers                    = "users"
+	tableEmailVerificationTokens string = "email_verification_tokens"
+	tableMessages                       = "messages"
+	tableSessionChallenges              = "session_challenges"
+	tableUserFCMTokens                  = "user_fcm_tokens"
+	tableUsers                          = "users"
 )
 
 func initDB(sqlDSN string) error {

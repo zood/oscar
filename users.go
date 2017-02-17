@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
@@ -20,17 +21,18 @@ const publicUserIDSize = 16
 
 // User ...
 type User struct {
-	ID                          int64          `json:"-"db:"id"`
+	ID                          int64          `json:"-" db:"id"`
 	PublicID                    encodableBytes `json:"id,omitempty"`
-	Username                    string         `json:"username,omitempty"db:"username"`
-	PasswordSalt                encodableBytes `json:"password_salt,omitempty"db:"password_salt"`
-	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit,omitempty"db:"password_hash_operations_limit"`
-	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty"db:"password_hash_memory_limit"`
-	PublicKey                   encodableBytes `json:"public_key,omitempty"db:"public_key"`
-	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key,omitempty"db:"wrapped_secret_key"`
-	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce,omitempty"db:"wrapped_secret_key_nonce"`
-	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key,omitempty"db:"wrapped_symmetric_key"`
-	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce,omitempty"db:"wrapped_symmetric_key_nonce"`
+	Username                    string         `json:"username,omitempty" db:"username"`
+	PasswordSalt                encodableBytes `json:"password_salt,omitempty" db:"password_salt"`
+	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
+	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty" db:"password_hash_memory_limit"`
+	PublicKey                   encodableBytes `json:"public_key,omitempty" db:"public_key"`
+	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key,omitempty" db:"wrapped_secret_key"`
+	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce,omitempty" db:"wrapped_secret_key_nonce"`
+	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key,omitempty" db:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce,omitempty" db:"wrapped_symmetric_key_nonce"`
+	Email                       string         `json:"email" db:"email"`
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -141,6 +143,32 @@ func createUser(user User) ([]byte, *serverError) {
 	if user.WrappedSymmetricKeyNonce == nil || len(user.WrappedSymmetricKeyNonce) == 0 {
 		return nil, &serverError{code: ErrorInvalidWrappedSymmetricKeyNonce, message: "Invalid wrapped symmetric key nonce"}
 	}
+	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
+	var emailVerificationToken *string
+	if user.Email != "" {
+		if len(user.Email) > 254 {
+			return nil, &serverError{code: ErrorInvalidEmail, message: "Email address is too long"}
+		}
+		parts := strings.Split(user.Email, "@")
+		if len(parts) != 2 {
+			return nil, &serverError{code: ErrorInvalidEmail, message: "Email address doesn't have a user and domain separated by an '@'"}
+		}
+		if parts[0] == "" {
+			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid user component in email"}
+		}
+		domainParts := strings.Split(parts[1], ".")
+		if len(domainParts) < 2 {
+			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid domain in email address"}
+		}
+		tld := domainParts[len(domainParts)-1]
+		if len(tld) < 2 {
+			return nil, &serverError{code: ErrorInvalidEmail, message: "Invalid tld in domain"}
+		}
+
+		// everything looks good, so let's generate a verification token
+		token := randBase62(16)
+		emailVerificationToken = &token
+	}
 
 	// check if the username is already in use
 	checkUsernameSQL := "SELECT id FROM users WHERE username=?"
@@ -161,7 +189,13 @@ func createUser(user User) ([]byte, *serverError) {
 						wrapped_symmetric_key,
 						wrapped_symmetric_key_nonce)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	result, err := dbx().Exec(
+	tx, err := dbx().Beginx()
+	if err != nil {
+		logErr(err)
+		return nil, newInternalErr()
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
 		insertSQL,
 		user.Username,
 		user.PasswordSalt,
@@ -183,17 +217,32 @@ func createUser(user User) ([]byte, *serverError) {
 		return nil, newInternalErr()
 	}
 
-	// create an id for public use
-	pubID := make([]byte, publicUserIDSize)
-	idExists := true
-	tx, err := kvdb().Begin(true)
+	// if there was an email address, add a record for the token
+	if emailVerificationToken != nil {
+		insertSQL = `INSERT INTO email_verification_tokens (user_id, token, email, send_date) VALUES (?, ?, ?, ?)`
+		_, err = tx.Exec(insertSQL, id, *emailVerificationToken, user.Email, time.Now().Unix())
+		if err != nil {
+			logErr(err)
+			return nil, newInternalErr()
+		}
+	}
+	err = tx.Commit()
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
 	}
-	defer tx.Rollback()
-	uidsBucket := tx.Bucket(userIDsBucketName)
-	pubIDsBucket := tx.Bucket(publicIDsBucketName)
+
+	// create an id for public use
+	pubID := make([]byte, publicUserIDSize)
+	idExists := true
+	kvTx, err := kvdb().Begin(true)
+	if err != nil {
+		logErr(err)
+		return nil, newInternalErr()
+	}
+	defer kvTx.Rollback()
+	uidsBucket := kvTx.Bucket(userIDsBucketName)
+	pubIDsBucket := kvTx.Bucket(publicIDsBucketName)
 
 	for idExists {
 		_, err = crand.Read(pubID)
@@ -220,11 +269,20 @@ func createUser(user User) ([]byte, *serverError) {
 			logErr(err)
 			return nil, newInternalErr()
 		}
-		err = tx.Commit()
+		err = kvTx.Commit()
 		if err != nil {
 			logErr(err)
 			return nil, newInternalErr()
 		}
+	}
+
+	if emailVerificationToken != nil {
+		go func() {
+			err = sendVerificationEmail(*emailVerificationToken, user.Email)
+			if err != nil {
+				logErr(err)
+			}
+		}()
 	}
 
 	return pubID, nil
