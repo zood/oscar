@@ -99,13 +99,19 @@ func (pl packageListener) watch(boxID []byte) {
 		return
 	}
 
+	// create the subscription
 	sub := dropBoxPubSub.Sub(hexID)
 	pl.subs[hexID] = sub
+
+	// if there's already a package in the dropbox, send it
+	tmp := pickUpPackage(boxID)
+	if len(tmp) > 0 {
+		sub <- tmp
+	}
+
+	// Wrap up the packages we receive from the subscription, and send them on to
+	// the packages channel for writing to the network socket
 	go func() {
-		tmp := pickUpPackage(boxID)
-		if len(tmp) > 0 {
-			sub <- tmp
-		}
 		for pkg := range sub {
 			bytes := append([]byte{1}, boxID...)
 			bytes = append(bytes, pkg.([]byte)...)
