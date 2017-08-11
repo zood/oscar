@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/boltdb/bolt"
 	"github.com/cskr/pubsub"
@@ -28,13 +29,20 @@ type pkgEvent struct {
 	BoxID encodableBytes `json:"box_id"`
 }
 
-type packageListener struct {
-	conn *websocket.Conn
-	pkgs chan []byte
-	subs map[string]chan interface{}
+type subscriptionReader struct {
+	sub    chan interface{}
+	closed chan bool
 }
 
-func (pl packageListener) ignore(boxID []byte) {
+type packageListener struct {
+	closed    chan bool
+	conn      *websocket.Conn
+	pkgs      chan []byte
+	subs      map[string]subscriptionReader
+	waitGroup sync.WaitGroup
+}
+
+func (pl *packageListener) ignore(boxID []byte) {
 	if len(boxID) != dropBoxIDSize {
 		log.Printf("invalid drop box id length (%d)", len(boxID))
 		return
@@ -42,17 +50,17 @@ func (pl packageListener) ignore(boxID []byte) {
 	hexID := hex.EncodeToString(boxID)
 
 	// find the channel of this subscription
-	sub, ok := pl.subs[hexID]
+	sr, ok := pl.subs[hexID]
 	if !ok {
 		log.Printf("received 'ignore' for non-existent subscription")
 		return
 	}
 
-	dropBoxPubSub.Unsub(sub)
+	close(sr.closed)
 	delete(pl.subs, hexID)
 }
 
-func (pl packageListener) read() {
+func (pl *packageListener) read() {
 	for {
 		msgType, buf, err := pl.conn.ReadMessage()
 		if err != nil {
@@ -77,16 +85,34 @@ func (pl packageListener) read() {
 		}
 	}
 
-	// unsubscribe every channel we have
-	for _, ch := range pl.subs {
-		dropBoxPubSub.Unsub(ch)
-	}
-
-	close(pl.pkgs)
-	pl.conn.Close()
+	// unblocks the goroutine that's running stop()
+	close(pl.closed)
 }
 
-func (pl packageListener) watch(boxID []byte) {
+func (pl *packageListener) stop() {
+	// wait here until someone tells us to shut down
+	<-pl.closed
+
+	// notify every subscription reader to stop
+	for _, sr := range pl.subs {
+		close(sr.closed)
+	}
+
+	// wait until all the subscription readers have completely stopped
+	pl.waitGroup.Wait()
+
+	// perform the final clean up
+	pl.conn.Close()
+	close(pl.pkgs)
+}
+
+func (pl *packageListener) start() {
+	go pl.read()
+	go pl.write()
+	go pl.stop()
+}
+
+func (pl *packageListener) watch(boxID []byte) {
 	if len(boxID) != dropBoxIDSize {
 		log.Printf("invalid drop box id length (%d)", len(boxID))
 		return
@@ -101,7 +127,11 @@ func (pl packageListener) watch(boxID []byte) {
 
 	// create the subscription
 	sub := dropBoxPubSub.Sub(hexID)
-	pl.subs[hexID] = sub
+	sr := subscriptionReader{
+		closed: make(chan bool),
+		sub:    sub,
+	}
+	pl.subs[hexID] = sr
 
 	// if there's already a package in the dropbox, send it
 	tmp := pickUpPackage(boxID)
@@ -111,16 +141,27 @@ func (pl packageListener) watch(boxID []byte) {
 
 	// Wrap up the packages we receive from the subscription, and send them on to
 	// the packages channel for writing to the network socket
+	pl.waitGroup.Add(1)
 	go func() {
-		for pkg := range sub {
-			bytes := append([]byte{1}, boxID...)
-			bytes = append(bytes, pkg.([]byte)...)
-			pl.pkgs <- bytes
+		defer pl.waitGroup.Done()
+		defer dropBoxPubSub.Unsub(sub)
+		for {
+			select {
+			case <-pl.closed:
+				return
+			case pkg := <-sub:
+				if pkg == nil {
+					return
+				}
+				bytes := append([]byte{1}, boxID...)
+				bytes = append(bytes, pkg.([]byte)...)
+				pl.pkgs <- bytes
+			}
 		}
 	}()
 }
 
-func (pl packageListener) write() {
+func (pl *packageListener) write() {
 	for msg := range pl.pkgs {
 		err := pl.conn.WriteMessage(websocket.BinaryMessage, msg)
 		if err != nil {
@@ -129,16 +170,12 @@ func (pl packageListener) write() {
 	}
 }
 
-func (pl packageListener) start() {
-	go pl.read()
-	go pl.write()
-}
-
-func newPackageListener(conn *websocket.Conn) packageListener {
-	return packageListener{
-		conn: conn,
-		pkgs: make(chan []byte),
-		subs: make(map[string]chan interface{}),
+func newPackageListener(conn *websocket.Conn) *packageListener {
+	return &packageListener{
+		closed: make(chan bool),
+		conn:   conn,
+		pkgs:   make(chan []byte),
+		subs:   make(map[string]subscriptionReader),
 	}
 }
 

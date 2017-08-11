@@ -154,7 +154,7 @@ func createUser(user User) ([]byte, *serverError) {
 			return nil, &serverError{code: errorInvalidEmail, message: "Email address doesn't have a user and domain separated by an '@'"}
 		}
 		if parts[0] == "" {
-			return nil, &serverError{code: errorInvalidEmail, message: "Invalid user component in email"}
+			return nil, &serverError{code: errorInvalidEmail, message: "Invalid local component in email"}
 		}
 		domainParts := strings.Split(parts[1], ".")
 		if len(domainParts) < 2 {

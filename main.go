@@ -40,6 +40,7 @@ func main() {
 	}
 
 	r := mux.NewRouter()
+	r.Handle("/server-info", logHandler(serverInfoHandler)).Methods("GET")
 	alphaRouter := r.PathPrefix("/alpha").Subrouter()
 	installEndPoints(alphaRouter)
 
@@ -111,7 +112,7 @@ func installEndPoints(r *mux.Router) {
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	// pushMessageToUser(22, 16)
-	sendFirebaseMessage(16, nil, false)
+	// sendFirebaseMessage(16, nil, false)
 }
 
 type tlsHandshakeFilter struct{}
@@ -126,6 +127,4 @@ func (dl *tlsHandshakeFilter) Write(p []byte) (int, error) {
 }
 
 func playground() {
-	// err := sendEmail("arash@ara.sh", "noreply@pijun.io", "Hello, world", "This is the best!")
-	// log.Printf("Error sending gmail: %v", err)
 }

@@ -125,7 +125,6 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 			sendInternalErr(w, err)
 			return
 		}
-		// msg.PublicRecipientID = pubIDFromUserID(msg.RecipientID)
 		msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
 		msgs = append(msgs, msg)
 	}
