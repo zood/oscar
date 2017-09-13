@@ -194,7 +194,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username := vars["username"]
 	username = strings.ToLower(username)
 
-	// we'll retrieve the symmetric key data in case the login is successful
+	// we also retrieve the symmetric key data in case the login is successful
 	const userSQL = `
 	SELECT id, public_key, wrapped_symmetric_key, wrapped_symmetric_key_nonce FROM users WHERE username=?`
 	var userID int64
@@ -234,6 +234,10 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	decryptedChallenge, ok := publicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, userPubKey, oscarKeyPair.secret)
 	if !ok {
+		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
+		return
+	}
+	if decryptedChallenge == nil || len(decryptedChallenge) == 0 {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}

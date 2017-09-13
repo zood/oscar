@@ -49,7 +49,9 @@ type fcmMulticastMessage struct {
 }
 
 func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
-	log.Printf("sendFirebaseMessage(%d)", userID)
+	if shouldLogInfo() {
+		log.Printf("sending fcm to %s", usernameFromID(userID))
+	}
 	rows, err := db().Query("SELECT token FROM user_fcm_tokens WHERE user_id=?", userID)
 	if err != nil {
 		logErr(err)
@@ -137,7 +139,7 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 		if result.MessageID != nil && result.RegistrationID != nil {
 			// We've been provided a canonical registration id. Check if we
 			// already have that ID. If so, just drop the old token. If not,
-			// update the told token to the new one.
+			// update the old token to the new one.
 			log.Printf("| MessageID: %v, RegID: %v", result.MessageID, result.RegistrationID)
 			var foundID int64
 			// check if we already have the canonical token for this user

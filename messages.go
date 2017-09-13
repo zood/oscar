@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -68,6 +70,10 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shouldLogInfo() {
+		log.Printf("%s => %s", usernameFromID(sessionUserID), usernameFromID(userID))
+	}
+
 	if userID == sessionUserID {
 		sendBadReq(w, "You can't send a message to yourself")
 		return
@@ -102,6 +108,36 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		pushMessageToUser(msgID, userID, body.Urgent)
 	}()
+}
+
+// getMessageHandler handles GET /messages/{message_id}
+func getMessageHandler(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r.Context())
+	vars := mux.Vars(r)
+	msgIDStr := vars["message_id"]
+	msgID, err := strconv.ParseInt(msgIDStr, 10, 64)
+	if err != nil {
+		sendBadReq(w, "Invalid message id")
+		return
+	}
+
+	selectSQL := `
+	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=? AND id=?`
+	msg := Message{}
+	err = dbx().Get(&msg, selectSQL, userID, msgID)
+	switch err {
+	case nil:
+		break
+	case sql.ErrNoRows:
+		sendNotFound(w, "Message not found", errorNotFound)
+		return
+	default:
+		sendInternalErr(w, err)
+		return
+	}
+	msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
+
+	sendSuccess(w, msg)
 }
 
 // getMessagesHandler handles GET /messages
@@ -183,7 +219,6 @@ func pushMessageToUser(msgID int64, userID int64, urgent bool) {
 
 	// if the payload is small, send the entire thing
 	if len(buf) <= 3584 {
-		// log.Printf("payload: %s", buf)
 		sendFirebaseMessage(userID, msgMap, urgent)
 		return
 	}

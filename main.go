@@ -14,9 +14,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Debug contains whether the server is running in debug mode
-var Debug = false
-
 var defaultCiphers = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -29,10 +26,15 @@ var defaultCiphers = []uint16{
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-	debug := flag.Bool("debug", false, "Enables additional log output")
 	configPath := flag.String("config", "", "Path to config file")
+	lvl := flag.Int("log-level", 4, "Controls the amount of info logged. Range from 1-4. Default is 4, errors only.")
 	flag.Parse()
-	Debug = *debug
+
+	if !validLogLevel(*lvl) {
+		log.Fatalf("Invalid log level (%d). Must be between 1-4, inclusive.", *lvl)
+	}
+
+	currLogLevel = logLevel(*lvl)
 
 	port, tlsEnabled, err := applyConfigFile(*configPath)
 	if err != nil {
@@ -41,6 +43,8 @@ func main() {
 
 	r := mux.NewRouter()
 	r.Handle("/server-info", logHandler(serverInfoHandler)).Methods("GET")
+	r.Handle("/log-level", logHandler(logLevelHandler)).Methods("GET")
+	r.Handle("/log-level", logHandler(setLogLevelHandler)).Methods("PUT")
 	alphaRouter := r.PathPrefix("/alpha").Subrouter()
 	installEndPoints(alphaRouter)
 
@@ -90,8 +94,9 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/users/{public_id}/messages", logHandler(sessionHandler(sendMessageToUserHandler))).Methods("POST")
 	r.Handle("/users/{public_id}/public-key", logHandler(corsHandler(getUserPublicKeyHandler))).Methods("GET")
 
-	r.Handle("/messages", logHandler(sessionHandler(getMessagesHandler))).Methods("GET")
-	r.Handle("/messages/{message_id:[0-9]+}", logHandler(sessionHandler(deleteMessageHandler))).Methods("DELETE")
+	r.Handle("/messages", logHandler(sessionHandler(getMessagesHandler))).Methods(http.MethodGet)
+	r.Handle("/messages/{message_id:[0-9]+}", logHandler(sessionHandler(getMessageHandler))).Methods(http.MethodGet)
+	r.Handle("/messages/{message_id:[0-9]+}", logHandler(sessionHandler(deleteMessageHandler))).Methods(http.MethodDelete)
 
 	// this has to come first, so it has a chance to match before the box_id urls
 	r.Handle("/drop-boxes/watch", logHandler(createPackageWatcherHandler)).Methods("GET")

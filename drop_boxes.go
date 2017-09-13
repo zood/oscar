@@ -225,24 +225,50 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shouldLogInfo() {
+		userID := userIDFromContext(r.Context())
+		log.Printf("%s dropping pkg to %s", usernameFromID(userID), hexBoxID)
+	}
+
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: about to read request body")
+	}
 	pkg, err := ioutil.ReadAll(r.Body)
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: read request error? %v", err)
+	}
 	if err != nil {
 		sendBadReq(w, "unable to read POST body: "+err.Error())
 		return
+	}
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: about to update the bucket")
 	}
 	err = kvdb().Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(dropboxesBucketName)
 		err := bucket.Put(boxID, pkg)
 		return err
 	})
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: bucket update error? %v", err)
+	}
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: sending success")
+	}
 	sendSuccess(w, nil)
 
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: about to publish package")
+	}
 	dropBoxPubSub.Pub(pkg, hexBoxID)
+	if shouldLogDebug() {
+		log.Printf("\tdropPkg: done publishing")
+	}
 }
 
 func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
