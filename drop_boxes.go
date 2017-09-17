@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -218,7 +219,80 @@ func pickUpPackage(boxID []byte) []byte {
 	return pkg
 }
 
-// dropPackageHandler handles POST /drop-boxes/{box_id}
+// sendMultiplePackagesHandler handles POST /drop-boxes/send
+func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
+	rdr, err := r.MultipartReader()
+	if err != nil {
+		sendBadReq(w, "unable to read multipart request: "+err.Error())
+		return
+	}
+
+	var boxes string
+
+	// build the map of boxes => packages
+	pkgs := make(map[string][]byte)
+	for {
+		p, err := rdr.NextPart()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			sendBadReq(w, fmt.Sprintf("error reading part: %s", err.Error()))
+			return
+		}
+
+		data, err := ioutil.ReadAll(p)
+		if err != nil {
+			sendBadReq(w, fmt.Sprintf("error reading part data: %s", err.Error()))
+			return
+		}
+
+		hexBoxID := p.FormName()
+		boxID, err := hex.DecodeString(hexBoxID)
+		if err != nil {
+			sendBadReq(w, "invalid box id: "+err.Error())
+			return
+		}
+		if len(boxID) != dropBoxIDSize {
+			sendBadReq(w, "invalid box id size")
+			return
+		}
+
+		pkgs[hexBoxID] = data
+
+		if shouldLogInfo() {
+			boxes += hexBoxID + ", "
+		}
+	}
+	if shouldLogInfo() {
+		userID := userIDFromContext(r.Context())
+		log.Printf("%s dropping to %s", usernameFromID(userID), boxes)
+	}
+	err = kvdb().Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(dropboxesBucketName)
+		for hexBoxID, pkg := range pkgs {
+			boxID, _ := hex.DecodeString(hexBoxID)
+			err := bucket.Put(boxID, pkg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		sendBadReq(w, err.Error())
+		return
+	}
+
+	sendSuccess(w, nil)
+
+	go func() {
+		for hexBoxID, pkg := range pkgs {
+			dropBoxPubSub.Pub(pkg, hexBoxID)
+		}
+	}()
+}
+
+// dropPackageHandler handles PUT /drop-boxes/{box_id}
 func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 	boxID, hexBoxID, ok := parseDropBoxID(w, r)
 	if !ok {
@@ -238,7 +312,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("\tdropPkg: read request error? %v", err)
 	}
 	if err != nil {
-		sendBadReq(w, "unable to read POST body: "+err.Error())
+		sendBadReq(w, "unable to read PUT body: "+err.Error())
 		return
 	}
 	if shouldLogDebug() {

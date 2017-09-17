@@ -100,6 +100,7 @@ func installEndPoints(r *mux.Router) {
 
 	// this has to come first, so it has a chance to match before the box_id urls
 	r.Handle("/drop-boxes/watch", logHandler(createPackageWatcherHandler)).Methods("GET")
+	r.Handle("/drop-boxes/send", logHandler(sessionHandler(sendMultiplePackagesHandler))).Methods("POST")
 	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(pickUpPackageHandler))).Methods("GET")
 	r.Handle("/drop-boxes/{box_id}", logHandler(sessionHandler(dropPackageHandler))).Methods("PUT")
 
