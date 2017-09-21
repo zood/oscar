@@ -50,7 +50,7 @@ type fcmMulticastMessage struct {
 
 func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 	if shouldLogInfo() {
-		log.Printf("sending fcm to %s", usernameFromID(userID))
+		log.Printf("fcm to %s (urgent? %t)", usernameFromID(userID), urgent)
 	}
 	rows, err := db().Query("SELECT token FROM user_fcm_tokens WHERE user_id=?", userID)
 	if err != nil {

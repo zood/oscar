@@ -83,6 +83,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		CipherText encodableBytes `json:"cipher_text"`
 		Nonce      encodableBytes `json:"nonce"`
 		Urgent     bool           `json:"urgent"`
+		Transient  bool           `json:"transient"`
 	}{}
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
@@ -90,23 +91,29 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	insertSQL := `
+	msg := Message{}
+	msg.CipherText = body.CipherText
+	msg.Nonce = body.Nonce
+	msg.PublicSenderID = pubIDFromUserID(sessionUserID)
+
+	if !body.Transient {
+		insertSQL := `
     INSERT INTO messages (recipient_id, sender_id, cipher_text, nonce, sent_date) VALUES (?, ?, ?, ?, ?)`
-	result, err := dbx().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
-	if err != nil {
-		sendInternalErr(w, err)
-		return
+		result, err := dbx().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
+		if err != nil {
+			sendInternalErr(w, err)
+			return
+		}
+		msg.ID, err = result.LastInsertId()
+		if err != nil {
+			logErr(err)
+		}
 	}
 
 	sendSuccess(w, nil)
 
 	go func() {
-		msgID, err := result.LastInsertId()
-		if err != nil {
-			logErr(err)
-			return
-		}
-		pushMessageToUser(msgID, userID, body.Urgent)
+		pushMessageToUser(msg, userID, body.Urgent)
 	}()
 }
 
@@ -190,17 +197,14 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(msgID int64, userID int64, urgent bool) {
-	selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
-	msg := Message{}
-	err := dbx().Get(&msg, selectSQL, msgID)
-	if err != nil {
-		logErr(err)
-		return
-	}
-
-	// msg.PublicRecipientID = pubIDFromUserID(msg.RecipientID)
-	msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
+func pushMessageToUser(msg Message, userID int64, urgent bool) {
+	// selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
+	// msg := Message{}
+	// err := dbx().Get(&msg, selectSQL, msgID)
+	// if err != nil {
+	// 	logErr(err)
+	// 	return
+	// }
 
 	msgMap := map[string]interface{}{
 		"id":          strconv.FormatInt(msg.ID, 10),
@@ -224,8 +228,12 @@ func pushMessageToUser(msgID int64, userID int64, urgent bool) {
 	}
 
 	// it's too big, so we'll tell the client to sync instead
+	if msg.ID == 0 {
+		logErr(errors.New("unable to send sync message via FCM for transient message"))
+		return
+	}
 	sendFirebaseMessage(userID, struct {
 		Type      string `json:"type"`
 		MessageID string `json:"message_id"`
-	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msgID, 10)}, urgent)
+	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}, urgent)
 }
