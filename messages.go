@@ -198,14 +198,6 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func pushMessageToUser(msg Message, userID int64, urgent bool) {
-	// selectSQL := `SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE id=?`
-	// msg := Message{}
-	// err := dbx().Get(&msg, selectSQL, msgID)
-	// if err != nil {
-	// 	logErr(err)
-	// 	return
-	// }
-
 	msgMap := map[string]interface{}{
 		"id":          strconv.FormatInt(msg.ID, 10),
 		"cipher_text": msg.CipherText,
