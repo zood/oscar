@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +14,9 @@ var userDBBackupFiles string
 
 func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
+	if shouldLogInfo() {
+		log.Printf("download_backup: %s", usernameFromID(userID))
+	}
 
 	fileLoc := filepath.Join(userDBBackupFiles, strconv.FormatInt(userID, 10)+".db")
 	_, err := os.Stat(fileLoc)
@@ -37,6 +41,9 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 
 func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
+	if shouldLogInfo() {
+		log.Printf("backup: %s", usernameFromID(userID))
+	}
 
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {

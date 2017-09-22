@@ -265,7 +265,7 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		log.Printf("%s dropping to %s", usernameFromID(userID), boxes)
+		log.Printf("drop_multiple_packages: %s => %s", usernameFromID(userID), boxes)
 	}
 	err = kvdb().Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(dropboxesBucketName)
@@ -346,6 +346,9 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
+	if shouldLogInfo() {
+		log.Printf("create_package_watcher")
+	}
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,

@@ -49,9 +49,6 @@ type fcmMulticastMessage struct {
 }
 
 func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
-	if shouldLogInfo() {
-		log.Printf("fcm to %s (urgent? %t)", usernameFromID(userID), urgent)
-	}
 	rows, err := db().Query("SELECT token FROM user_fcm_tokens WHERE user_id=?", userID)
 	if err != nil {
 		logErr(err)
@@ -129,6 +126,9 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 
 	// if everything went smoothly, we're done
 	if fcmBody.Failure == 0 && fcmBody.CanonicalIDs == 0 {
+		if shouldLogDebug() {
+			log.Printf("msg id %s", *fcmBody.Results[0].MessageID)
+		}
 		return
 	}
 

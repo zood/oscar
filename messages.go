@@ -70,10 +70,6 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if shouldLogInfo() {
-		log.Printf("%s => %s", usernameFromID(sessionUserID), usernameFromID(userID))
-	}
-
 	if userID == sessionUserID {
 		sendBadReq(w, "You can't send a message to yourself")
 		return
@@ -89,6 +85,12 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		sendBadReq(w, "unable to decode body: "+err.Error())
 		return
+	}
+
+	if shouldLogInfo() {
+		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
+			usernameFromID(sessionUserID), usernameFromID(userID),
+			body.Urgent, body.Transient)
 	}
 
 	msg := Message{}
@@ -128,6 +130,10 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shouldLogInfo() {
+		log.Printf("get_message: %s %d", usernameFromID(userID), msgID)
+	}
+
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=? AND id=?`
 	msg := Message{}
@@ -150,6 +156,9 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 // getMessagesHandler handles GET /messages
 func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
+	if shouldLogInfo() {
+		log.Printf("get_messages: %s", usernameFromID(userID))
+	}
 
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
@@ -184,6 +193,10 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		sendBadReq(w, "Invalid message id")
 		return
+	}
+
+	if shouldLogInfo() {
+		log.Printf("delete_message: %s %d", usernameFromID(userID), msgID)
 	}
 
 	// only delete the message if the calling user is also the recipient

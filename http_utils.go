@@ -11,7 +11,7 @@ import (
 
 func logHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if shouldLogInfo() {
+		if shouldLogDebug() {
 			log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)
 		}
 
