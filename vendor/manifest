@@ -10,14 +10,6 @@
 			"notests": true
 		},
 		{
-			"importpath": "github.com/cskr/pubsub",
-			"repository": "https://github.com/cskr/pubsub",
-			"vcs": "git",
-			"revision": "308ca2a9d8371528b36017db3c7eb669b34d9736",
-			"branch": "master",
-			"notests": true
-		},
-		{
 			"importpath": "github.com/go-sql-driver/mysql",
 			"repository": "https://github.com/go-sql-driver/mysql",
 			"vcs": "git",

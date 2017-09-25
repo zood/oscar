@@ -10,14 +10,14 @@ import (
 	"sync"
 
 	"github.com/boltdb/bolt"
-	"github.com/cskr/pubsub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"pijun.io/pubsub"
 )
 
 const dropBoxIDSize = 16
 
-var dropBoxPubSub = pubsub.New(1)
+var dropBoxPubSub = pubsub.NewPubSub()
 
 const (
 	clientCmdNop    byte = 0
@@ -31,7 +31,7 @@ type pkgEvent struct {
 }
 
 type subscriptionReader struct {
-	sub    chan interface{}
+	sub    chan []byte
 	closed chan bool
 }
 
@@ -143,9 +143,9 @@ func (pl *packageListener) watch(boxID []byte) {
 	// Wrap up the packages we receive from the subscription, and send them on to
 	// the packages channel for writing to the network socket
 	pl.waitGroup.Add(1)
-	go func() {
+	go func(topic string) {
 		defer pl.waitGroup.Done()
-		defer dropBoxPubSub.Unsub(sub)
+		defer dropBoxPubSub.Unsub(sub, topic)
 		for {
 			select {
 			case <-pl.closed:
@@ -155,11 +155,11 @@ func (pl *packageListener) watch(boxID []byte) {
 					return
 				}
 				bytes := append([]byte{1}, boxID...)
-				bytes = append(bytes, pkg.([]byte)...)
+				bytes = append(bytes, pkg...)
 				pl.pkgs <- bytes
 			}
 		}
-	}()
+	}(hexID)
 }
 
 func (pl *packageListener) write() {
