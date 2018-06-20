@@ -6,16 +6,16 @@ import (
 )
 
 // currLogLevel holds the current log detail desired
-var currLogLevel logLevel = logLevelError
+var currLogLevel = logLevelError
 
 type logLevel int
 
 // Log level values
 const (
 	logLevelDebug logLevel = 1
-	logLevelInfo           = 2
-	logLevelWarn           = 3
-	logLevelError          = 4
+	logLevelInfo  logLevel = 2
+	logLevelWarn  logLevel = 3
+	logLevelError logLevel = 4
 )
 
 func validLogLevel(lvl int) bool {
@@ -74,4 +74,20 @@ func setLogLevelHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, map[string]logLevel{
 		"log_level": currLogLevel,
 	})
+}
+
+func recordLogMessageHandler(w http.ResponseWriter, r *http.Request) {
+	postBody := struct {
+		UserID    encodableBytes `json:"user_id"`
+		Timestamp int64          `json:"timestamp"`
+		Message   string         `json:"message"`
+	}{}
+
+	err := json.NewDecoder(r.Body).Decode(&postBody)
+	if err != nil {
+		sendBadReq(w, "Failed to decode post body: "+err.Error())
+		return
+	}
+
+	sendSuccess(w, nil)
 }

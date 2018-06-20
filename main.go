@@ -114,6 +114,7 @@ func installEndPoints(r *mux.Router) {
 
 	r.Handle("/goroutine-stacks", logHandler(goroutineStacksHandler)).Methods("GET")
 	r.Handle("/test", logHandler(testHandler)).Methods("GET")
+	r.Handle("/logs", logHandler(recordLogMessageHandler)).Methods(http.MethodGet)
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
