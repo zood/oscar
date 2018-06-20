@@ -35,6 +35,7 @@ const (
 	errorBackupNotFound                          = 20
 	errorInvalidEmail                            = 21
 	errorMissingVerificationToken                = 22
+	errorInvalidPasswordHashAlgorithm            = 23
 )
 
 type serverError struct {

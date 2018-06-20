@@ -22,6 +22,9 @@ type keyPair struct {
 	secret []byte
 }
 
+const hashAlgArgon2i13 = "argon2i13"
+const hashAlgArgon2id13 = "argon2id13"
+
 const boxNonceSize = C.crypto_box_NONCEBYTES
 const publicKeySize = C.crypto_box_PUBLICKEYBYTES
 const secretKeySize = C.crypto_box_SECRETKEYBYTES
@@ -38,7 +41,7 @@ func (kp keyPair) String() string {
 		hex.EncodeToString(kp.secret))
 }
 
-func keyFromPassword(keySize int, pw string, salt []byte) ([]byte, error) {
+func stretchPassword(keySize int, pw string, salt []byte) ([]byte, error) {
 	key := make([]byte, keySize)
 	pwc := C.CString(pw)
 	result := C.crypto_pwhash(

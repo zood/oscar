@@ -25,6 +25,7 @@ type User struct {
 	PublicID                    encodableBytes `json:"id,omitempty"`
 	Username                    string         `json:"username,omitempty" db:"username"`
 	PasswordSalt                encodableBytes `json:"password_salt,omitempty" db:"password_salt"`
+	PasswordHashAlgorithm       string         `json:"password_hash_algorithm" db:"password_hash_algorithm"`
 	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
 	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty" db:"password_hash_memory_limit"`
 	PublicKey                   encodableBytes `json:"public_key,omitempty" db:"public_key"`
@@ -119,6 +120,9 @@ func createUser(user User) ([]byte, *serverError) {
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: errorInvalidPasswordSalt, message: "Invalid password salt"}
 	}
+	if user.PasswordHashAlgorithm != hashAlgArgon2i13 && user.PasswordHashAlgorithm != hashAlgArgon2id13 {
+		return nil, &serverError{code: errorInvalidPasswordHashAlgorithm, message: "Invalid password hash algorithm"}
+	}
 	if user.PasswordHashOperationsLimit < argon2iOpsLimitInteractive {
 		return nil, &serverError{code: errorArgon2iOpsLimitTooLow, message: "Password hash ops limit is too low"}
 	}
@@ -181,6 +185,7 @@ func createUser(user User) ([]byte, *serverError) {
 	insertSQL := `
 	INSERT INTO users (	username,
 						password_salt,
+						password_hash_algorithm,
 						password_hash_operations_limit,
 						password_hash_memory_limit,
 		 				public_key,
@@ -188,7 +193,7 @@ func createUser(user User) ([]byte, *serverError) {
 						wrapped_secret_key_nonce,
 						wrapped_symmetric_key,
 						wrapped_symmetric_key_nonce)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	tx, err := dbx().Beginx()
 	if err != nil {
 		logErr(err)
@@ -199,6 +204,7 @@ func createUser(user User) ([]byte, *serverError) {
 		insertSQL,
 		user.Username,
 		user.PasswordSalt,
+		user.PasswordHashAlgorithm,
 		user.PasswordHashOperationsLimit,
 		user.PasswordHashMemoryLimit,
 		user.PublicKey,
