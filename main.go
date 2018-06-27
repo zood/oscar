@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
+	"pijun.io/oscar/relstor"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 )
 
@@ -22,6 +24,8 @@ var defaultCiphers = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 }
+
+var rs relstor.Provider
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)

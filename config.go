@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"pijun.io/oscar/mariadb"
+
 	"github.com/pkg/errors"
 )
 
@@ -73,6 +75,11 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 	gFCMServerKey = conf.FCMServerKey
 
 	// sql database
+	rs, err = mariadb.New(conf.SQLDSN)
+	if err != nil {
+		return 0, false, err
+	}
+
 	err = initDB(conf.SQLDSN)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "sql db init failed")

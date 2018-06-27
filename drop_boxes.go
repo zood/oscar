@@ -265,7 +265,7 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		log.Printf("drop_multiple_packages: %s => %s", usernameFromID(userID), boxes)
+		log.Printf("drop_multiple_packages: %s => %s", rs.Username(userID), boxes)
 	}
 	err = kvdb().Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(dropboxesBucketName)
@@ -301,7 +301,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		log.Printf("%s dropping pkg to %s", usernameFromID(userID), hexBoxID)
+		log.Printf("%s dropping pkg to %s", rs.Username(userID), hexBoxID)
 	}
 
 	if shouldLogDebug() {

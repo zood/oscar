@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
@@ -51,13 +50,13 @@ func (eb encodableBytes) Value() (driver.Value, error) {
 
 // Message ...
 type Message struct {
-	ID             int64          `db:"id" json:"id"`
-	RecipientID    int64          `db:"recipient_id" json:"-"`
-	SenderID       int64          `db:"sender_id" json:"-"`
+	ID             int64          `json:"id"`
+	RecipientID    int64          `json:"-"`
+	SenderID       int64          `json:"-"`
 	PublicSenderID encodableBytes `json:"sender_id"`
-	CipherText     encodableBytes `db:"cipher_text" json:"cipher_text"`
-	Nonce          encodableBytes `db:"nonce" json:"nonce"`
-	SentDate       int64          `db:"sent_date" json:"sent_date"`
+	CipherText     encodableBytes `json:"cipher_text"`
+	Nonce          encodableBytes `json:"nonce"`
+	SentDate       int64          `json:"sent_date"`
 }
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
@@ -89,7 +88,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	if shouldLogInfo() {
 		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
-			usernameFromID(sessionUserID), usernameFromID(userID),
+			rs.Username(sessionUserID), rs.Username(userID),
 			body.Urgent, body.Transient)
 	}
 
@@ -99,16 +98,10 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	msg.PublicSenderID = pubIDFromUserID(sessionUserID)
 
 	if !body.Transient {
-		insertSQL := `
-    INSERT INTO messages (recipient_id, sender_id, cipher_text, nonce, sent_date) VALUES (?, ?, ?, ?, ?)`
-		result, err := dbx().Exec(insertSQL, userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
+		msg.ID, err = rs.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
 		if err != nil {
 			sendInternalErr(w, err)
 			return
-		}
-		msg.ID, err = result.LastInsertId()
-		if err != nil {
-			logErr(err)
 		}
 	}
 
@@ -131,24 +124,28 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldLogInfo() {
-		log.Printf("get_message: %s %d", usernameFromID(userID), msgID)
+		log.Printf("get_message: %s %d", rs.Username(userID), msgID)
 	}
 
-	selectSQL := `
-	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=? AND id=?`
-	msg := Message{}
-	err = dbx().Get(&msg, selectSQL, userID, msgID)
-	switch err {
-	case nil:
-		break
-	case sql.ErrNoRows:
+	rec, err := rs.MessageToRecipient(userID, msgID)
+	if err != nil {
+		sendInternalErr(w, err)
+	}
+
+	if rec == nil {
 		sendNotFound(w, "Message not found", errorNotFound)
 		return
-	default:
-		sendInternalErr(w, err)
-		return
 	}
-	msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
+
+	msg := Message{
+		ID:             rec.ID,
+		RecipientID:    rec.RecipientID,
+		SenderID:       rec.SenderID,
+		CipherText:     rec.CipherText,
+		Nonce:          rec.Nonce,
+		SentDate:       rec.SentDate,
+		PublicSenderID: pubIDFromUserID(rec.SenderID),
+	}
 
 	sendSuccess(w, msg)
 }
@@ -157,27 +154,25 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	if shouldLogInfo() {
-		log.Printf("get_messages: %s", usernameFromID(userID))
+		log.Printf("get_messages: %s", rs.Username(userID))
 	}
 
-	selectSQL := `
-	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
-	rows, err := dbx().Queryx(selectSQL, userID)
+	records, err := rs.MessageRecords(userID)
 	if err != nil {
-		logErr(err)
 		sendInternalErr(w, err)
 		return
 	}
-
 	msgs := make([]Message, 0, 0)
-	for rows.Next() {
-		msg := Message{}
-		err = rows.StructScan(&msg)
-		if err != nil {
-			sendInternalErr(w, err)
-			return
+	for _, r := range records {
+		msg := Message{
+			ID:             r.ID,
+			RecipientID:    r.RecipientID,
+			SenderID:       r.SenderID,
+			CipherText:     r.CipherText,
+			Nonce:          r.Nonce,
+			SentDate:       r.SentDate,
+			PublicSenderID: pubIDFromUserID(r.SenderID),
 		}
-		msg.PublicSenderID = pubIDFromUserID(msg.SenderID)
 		msgs = append(msgs, msg)
 	}
 
@@ -196,12 +191,11 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldLogInfo() {
-		log.Printf("delete_message: %s %d", usernameFromID(userID), msgID)
+		log.Printf("delete_message: %s %d", rs.Username(userID), msgID)
 	}
 
 	// only delete the message if the calling user is also the recipient
-	deleteSQL := `DELETE FROM messages WHERE recipient_id=? AND id=?`
-	_, err = dbx().Exec(deleteSQL, userID, msgID)
+	err = rs.DeleteMessageToRecipient(userID, msgID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

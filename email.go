@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
 
@@ -80,41 +78,18 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 		sendBadReqCode(w, "Missing verification token", errorBadRequest)
 	}
 
-	querySQL := fmt.Sprintf("SELECT user_id, email, send_date FROM %s WHERE token=?", tableEmailVerificationTokens)
-	var userID int64
-	var email string
-	var sendDate int64
-	err = dbx().QueryRow(querySQL, body.Token).Scan(&userID, &email, &sendDate)
-	switch err {
-	case nil:
-	case sql.ErrNoRows:
-		sendBadReqCode(w, "Invalid token", errorMissingVerificationToken)
-		return
-	default:
+	evtr, err := rs.EmailVerificationTokenRecord(body.Token)
+	if err != nil {
 		sendInternalErr(w, err)
+		return
+	}
+	if evtr == nil {
+		sendBadReqCode(w, "Invalid token", errorMissingVerificationToken)
 		return
 	}
 
 	// add the email to the user, then delete the verification
-	tx, err := dbx().Begin()
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec("UPDATE users SET email=? WHERE id=?", email, userID)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-	_, err = tx.Exec("DELETE FROM "+tableEmailVerificationTokens+" WHERE user_id=?", userID)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-
-	err = tx.Commit()
+	err = rs.VerifyEmail(evtr.Email, evtr.UserID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -132,8 +107,7 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := fmt.Sprintf("DELETE FROM %s WHERE token=?", tableEmailVerificationTokens)
-	_, err := dbx().Exec(query, token)
+	err := rs.DisavowEmail(token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

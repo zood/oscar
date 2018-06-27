@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	crand "crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"log"
@@ -88,21 +87,12 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// get the user's public key
-		selectUserInfoSQL := `SELECT id, public_key FROM users WHERE username=?`
-		var userID int64
-		pubKey := make([]byte, 0)
-		err = dbx().QueryRow(selectUserInfoSQL, st.Name).Scan(&userID, &pubKey)
+		userID, pubKey, err := rs.LimitedUserInfo(st.Name)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				sendInvalidAccessToken(w)
-			} else {
-				sendInternalErr(w, err)
-			}
+			sendInternalErr(w, err)
 			return
 		}
-
-		if len(pubKey) == 0 {
-			log.Printf("public key is empty/nil")
+		if pubKey == nil {
 			sendInvalidAccessToken(w)
 			return
 		}
@@ -137,24 +127,32 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username = strings.ToLower(username)
 
 	// find the user
-	selectSQL := `
-	SELECT id, public_key, wrapped_secret_key, wrapped_secret_key_nonce, password_salt, password_hash_algorithm, password_hash_operations_limit, password_hash_memory_limit FROM users WHERE username=?`
-	user := User{}
-	err := dbx().Get(&user, selectSQL, username)
+	rec, err := rs.User(username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			sendNotFound(w, "user not found", errorUserNotFound)
-		} else {
-			sendInternalErr(w, err)
-		}
+		sendInternalErr(w, err)
 		return
+	}
+	if rec == nil {
+		sendNotFound(w, "user not found", errorUserNotFound)
+		return
+	}
+
+	// only a subset of the user should be be returned for an authentication challenge
+	user := User{
+		PublicKey:                   rec.PublicKey,
+		WrappedSecretKey:            rec.WrappedSecretKey,
+		WrappedSecretKeyNonce:       rec.WrappedSecretKeyNonce,
+		PasswordSalt:                rec.PasswordSalt,
+		PasswordHashAlgorithm:       rec.PasswordHashAlgorithm,
+		PasswordHashOperationsLimit: rec.PasswordHashOperationsLimit,
+		PasswordHashMemoryLimit:     rec.PasswordHashMemoryLimit,
 	}
 
 	challenge := make([]byte, 255)
 	crand.Read(challenge)
 
 	// delete any existing challenge for this user
-	_, err = dbx().Exec("DELETE FROM session_challenges WHERE user_id=?", user.ID)
+	err = rs.DeleteSessionChallengeUser(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -162,9 +160,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	creationDate := time.Now().Unix()
 
-	insertSQL := `
-	INSERT INTO session_challenges (user_id, creation_date, challenge) VALUES (?, ?, ?)`
-	_, err = dbx().Exec(insertSQL, user.ID, creationDate, challenge)
+	err = rs.InsertSessionChallenge(user.ID, creationDate, challenge)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -194,45 +190,35 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username := vars["username"]
 	username = strings.ToLower(username)
 
-	// we also retrieve the symmetric key data in case the login is successful
-	const userSQL = `
-	SELECT id, public_key, wrapped_symmetric_key, wrapped_symmetric_key_nonce FROM users WHERE username=?`
-	var userID int64
-	var userPubKey []byte
-	var wrappedSymKey []byte
-	var wrappedSymKeyNonce []byte
-	err = dbx().QueryRow(userSQL, username).Scan(&userID, &userPubKey, &wrappedSymKey, &wrappedSymKeyNonce)
+	user, err := rs.User(username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			sendNotFound(w, "unknown user", errorUserNotFound)
-		} else {
-			sendInternalErr(w, err)
-		}
+		sendInternalErr(w, err)
+		return
+	}
+	if user == nil {
+		sendNotFound(w, "unknown user", errorUserNotFound)
 		return
 	}
 
 	// find the challenge for this user
-	const challengeSQL = `
-	SELECT id, creation_date, challenge FROM session_challenges WHERE user_id=?`
-	challenge := sessionChallenge{}
-	err = dbx().QueryRowx(challengeSQL, userID).StructScan(&challenge)
+	challenge, err := rs.SessionChallenge(user.ID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			sendNotFound(w, "challenge not found", errorChallengeNotFound)
-		} else {
-			sendInternalErr(w, err)
-		}
+		sendInternalErr(w, err)
+		return
+	}
+	if challenge == nil {
+		sendNotFound(w, "challenge not found", errorChallengeNotFound)
 		return
 	}
 
 	// if the challenge was created most than 2 minutes ago, then consider it expired
 	if (time.Now().Unix() - challenge.CreationDate) > 120 {
 		sendBadReqCode(w, "challenge expired", errorChallengeExpired)
-		go deleteChallenge(challenge.ID)
+		go rs.DeleteSessionChallengeID(challenge.ID)
 		return
 	}
 
-	decryptedChallenge, ok := publicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, userPubKey, oscarKeyPair.secret)
+	decryptedChallenge, ok := publicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, user.PublicKey, oscarKeyPair.secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -248,7 +234,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decryptedCreationDate, ok := publicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, userPubKey, oscarKeyPair.secret)
+	decryptedCreationDate, ok := publicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, user.PublicKey, oscarKeyPair.secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -282,20 +268,13 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := append(tokenNonce, tokenCT...)
 	accessTokenB64 := base64.StdEncoding.EncodeToString(accessToken)
 
-	pubID := pubIDFromUserID(userID)
+	pubID := pubIDFromUserID(user.ID)
 
 	sendSuccess(w, loginResponse{
 		ID:                       pubID,
 		AccessToken:              accessTokenB64,
-		WrappedSymmetricKey:      wrappedSymKey,
-		WrappedSymmetricKeyNonce: wrappedSymKeyNonce})
+		WrappedSymmetricKey:      user.WrappedSecretKey,
+		WrappedSymmetricKeyNonce: user.WrappedSymmetricKeyNonce})
 
-	go deleteChallenge(challenge.ID)
-}
-
-func deleteChallenge(challengeID int64) {
-	_, err := dbx().Exec("DELETE FROM session_challenges WHERE id=?", challengeID)
-	if err != nil {
-		logErr(err)
-	}
+	go rs.DeleteSessionChallengeID(challenge.ID)
 }

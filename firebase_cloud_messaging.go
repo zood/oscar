@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -141,28 +140,27 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 			// already have that ID. If so, just drop the old token. If not,
 			// update the old token to the new one.
 			log.Printf("| MessageID: %v, RegID: %v", result.MessageID, result.RegistrationID)
-			var foundID int64
 			// check if we already have the canonical token for this user
-			err := dbx().Get(&foundID, "SELECT id FROM user_fcm_tokens WHERE user_id=? AND token=?", userID, result.RegistrationID)
-			if err == nil {
+			tokRec, err := rs.FCMTokenUser(userID, *result.RegistrationID)
+			if err == nil && tokRec != nil {
 				// we do, so drop the row with the old token
-				_, err := dbx().Exec("DELETE FROM user_fcm_tokens WHERE token=?", tokens[i])
+				err := rs.DeleteFCMToken(tokens[i])
 				if err != nil {
 					logErr(err)
 				}
-			} else if err == sql.ErrNoRows {
+			} else if err == nil {
 				// nope, we don't. So replace the old token.
-				changes, err := db().Exec("UPDATE user_fcm_tokens SET token=? WHERE token=?", result.RegistrationID, tokens[i])
+				rowsAffected, err := rs.ReplaceFCMToken(tokens[i], *result.RegistrationID)
 				if err != nil {
 					logErr(err)
 				} else {
-					cnt, err := changes.RowsAffected()
-					if err != nil {
-						logErr(err)
-					} else {
-						if cnt != 1 {
-							logErr(fmt.Errorf("received a registration id change, but no %d rows affected in db change\nmessage_id: %s\nregistration_id: %s\nuser id: %d\ntoken: %s", cnt, *result.MessageID, *result.RegistrationID, userID, tokens[i]))
-						}
+					if rowsAffected != 1 {
+						logErr(fmt.Errorf("received a registration id change, but no %d rows affected in db change\nmessage_id: %s\nregistration_id: %s\nuser id: %d\ntoken: %s",
+							rowsAffected,
+							*result.MessageID,
+							*result.RegistrationID,
+							userID,
+							tokens[i]))
 					}
 				}
 			}
@@ -203,21 +201,17 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	var foundID, foundUserID int64
-	selectSQL := `SELECT id, user_id FROM user_fcm_tokens WHERE token=?`
-	err = dbx().QueryRow(selectSQL, body.Token).Scan(&foundID, &foundUserID)
+	ftr, err := rs.FCMToken(body.Token)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			// insert the token, then return
-			_, err = dbx().Exec("INSERT INTO user_fcm_tokens (user_id, token) VALUES (?, ?)", userID, body.Token)
-			if err != nil {
-				sendInternalErr(w, err)
-			} else {
-				sendSuccess(w, nil)
-			}
-			return
-		}
 		sendInternalErr(w, err)
+		return
+	}
+	if ftr == nil {
+		// insert the token, then return
+		err = rs.InsertFCMToken(userID, body.Token)
+		if err != nil {
+			sendInternalErr(w, err)
+		}
 		return
 	}
 
@@ -226,12 +220,12 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	// the case where a user logs out on their device and somebody else
 	// logs in. The device token will still be the same, so we need to make sure
 	// the user_id and device token are always in sync.
-	if foundUserID == userID {
+	if ftr.UserID == userID {
 		sendSuccess(w, nil)
 		return
 	}
 
-	_, err = dbx().Exec("UPDATE user_fcm_tokens SET user_id=? WHERE token=?", userID, body.Token)
+	err = rs.UpdateUserIDOfFCMToken(userID, body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -244,7 +238,7 @@ func deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := mux.Vars(r)["token"]
 
-	_, err := dbx().Exec("DELETE FROM user_fcm_tokens WHERE user_id=? AND token=?", userID, token)
+	err := rs.DeleteFCMTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

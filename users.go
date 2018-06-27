@@ -2,14 +2,14 @@ package main
 
 import (
 	crand "crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
+
+	"pijun.io/oscar/relstor"
 
 	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
@@ -175,64 +175,29 @@ func createUser(user User) ([]byte, *serverError) {
 	}
 
 	// check if the username is already in use
-	checkUsernameSQL := "SELECT id FROM users WHERE username=?"
-	var foundID int
-	err := dbx().QueryRow(checkUsernameSQL, user.Username).Scan(&foundID)
-	if err == nil {
+	available, err := rs.UsernameAvailable(user.Username)
+	if err != nil {
+		logErr(err)
+		return nil, newInternalErr()
+	}
+	if !available {
 		return nil, &serverError{code: errorUsernameNotAvailable, message: "That username is already in use"}
 	}
 
-	insertSQL := `
-	INSERT INTO users (	username,
-						password_salt,
-						password_hash_algorithm,
-						password_hash_operations_limit,
-						password_hash_memory_limit,
-		 				public_key,
-						wrapped_secret_key,
-						wrapped_secret_key_nonce,
-						wrapped_symmetric_key,
-						wrapped_symmetric_key_nonce)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	tx, err := dbx().Beginx()
-	if err != nil {
-		logErr(err)
-		return nil, newInternalErr()
+	userRec := relstor.UserRecord{
+		Username:                    user.Username,
+		PasswordSalt:                user.PasswordSalt,
+		PasswordHashAlgorithm:       user.PasswordHashAlgorithm,
+		PasswordHashOperationsLimit: user.PasswordHashOperationsLimit,
+		PasswordHashMemoryLimit:     user.PasswordHashMemoryLimit,
+		PublicKey:                   user.PublicKey,
+		WrappedSecretKey:            user.WrappedSecretKey,
+		WrappedSecretKeyNonce:       user.WrappedSecretKeyNonce,
+		WrappedSymmetricKey:         user.WrappedSymmetricKey,
+		WrappedSymmetricKeyNonce:    user.WrappedSymmetricKeyNonce,
+		Email: &user.Email,
 	}
-	defer tx.Rollback()
-	result, err := tx.Exec(
-		insertSQL,
-		user.Username,
-		user.PasswordSalt,
-		user.PasswordHashAlgorithm,
-		user.PasswordHashOperationsLimit,
-		user.PasswordHashMemoryLimit,
-		user.PublicKey,
-		user.WrappedSecretKey,
-		user.WrappedSecretKeyNonce,
-		user.WrappedSymmetricKey,
-		user.WrappedSymmetricKeyNonce)
-	if err != nil {
-		logErr(err)
-		return nil, newInternalErr()
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		logErr(err)
-		return nil, newInternalErr()
-	}
-
-	// if there was an email address, add a record for the token
-	if emailVerificationToken != nil {
-		insertSQL = `INSERT INTO email_verification_tokens (user_id, token, email, send_date) VALUES (?, ?, ?, ?)`
-		_, err = tx.Exec(insertSQL, id, *emailVerificationToken, user.Email, time.Now().Unix())
-		if err != nil {
-			logErr(err)
-			return nil, newInternalErr()
-		}
-	}
-	err = tx.Commit()
+	id, err := rs.InsertUser(userRec, emailVerificationToken)
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
@@ -301,9 +266,7 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selectSQL := `SELECT public_key FROM users WHERE id=?`
-	var pubKey []byte
-	err := dbx().QueryRow(selectSQL, userID).Scan(&pubKey)
+	pubKey, err := rs.UserPublicKey(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -323,17 +286,20 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	username = strings.ToLower(username)
 
 	user := User{}
-	err := dbx().QueryRow("SELECT id, public_key FROM users WHERE username=?", username).Scan(&user.ID, &user.PublicKey)
-	switch err {
-	case nil:
-		user.PublicID = pubIDFromUserID(user.ID)
-		user.Username = username
-		sendSuccess(w, user)
-	case sql.ErrNoRows:
-		sendNotFound(w, "user not found", errorUserNotFound)
-	default:
+	var err error
+	user.ID, user.PublicKey, err = rs.LimitedUserInfo(username)
+	if err != nil {
 		sendInternalErr(w, err)
+		return
 	}
+	if user.PublicKey == nil {
+		sendNotFound(w, "user not found", errorUserNotFound)
+		return
+	}
+
+	user.Username = username
+	user.PublicID = pubIDFromUserID(user.ID)
+	sendSuccess(w, user)
 }
 
 func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
@@ -342,23 +308,26 @@ func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := User{}
-	err := dbx().QueryRowx("SELECT id, public_key, username FROM users WHERE id=?", userID).StructScan(&user)
+	username, pubKey, err := rs.LimitedUserInfoID(userID)
 	if err != nil {
-		// don't need to check for ErrNoRows, because parseUserID ensures the user exists
 		sendInternalErr(w, err)
 		return
+	}
+	// don't need to check for a missing user, because parseUserID ensures the user exists
+	user := User{
+		Username:  username,
+		PublicKey: pubKey,
 	}
 
 	sendSuccess(w, user)
 }
 
 // only useful for logging
-func usernameFromID(userID int64) string {
-	var str sql.NullString
-	err := db().QueryRow("SELECT username FROM users WHERE id=?", userID).Scan(&str)
-	if err != nil {
-		return ""
-	}
-	return str.String
-}
+// func usernameFromID(userID int64) string {
+// 	var str sql.NullString
+// 	err := db().QueryRow("SELECT username FROM users WHERE id=?", userID).Scan(&str)
+// 	if err != nil {
+// 		return ""
+// 	}
+// 	return str.String
+// }
