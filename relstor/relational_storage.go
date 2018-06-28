@@ -61,6 +61,7 @@ type Provider interface {
 	DisavowEmail(token string) error
 	EmailVerificationTokenRecord(token string) (*EmailVerificationTokenRecord, error)
 	FCMToken(token string) (*FCMTokenRecord, error)
+	FCMTokensRaw(userID int64) ([]string, error)
 	FCMTokenUser(userID int64, token string) (*FCMTokenRecord, error)
 	InsertFCMToken(userID int64, token string) error
 	InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error)

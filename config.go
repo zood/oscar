@@ -80,11 +80,6 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 		return 0, false, err
 	}
 
-	err = initDB(conf.SQLDSN)
-	if err != nil {
-		return 0, false, errors.Wrap(err, "sql db init failed")
-	}
-
 	// key-value database
 	err = initKVDB(conf.KVDBPath)
 	if err != nil {

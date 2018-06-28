@@ -48,20 +48,10 @@ type fcmMulticastMessage struct {
 }
 
 func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
-	rows, err := db().Query("SELECT token FROM user_fcm_tokens WHERE user_id=?", userID)
+	tokens, err := rs.FCMTokensRaw(userID)
 	if err != nil {
 		logErr(err)
 		return
-	}
-
-	var tokens []string
-	for rows.Next() {
-		var t string
-		err = rows.Scan(&t)
-		if err != nil {
-			logErr(err)
-		}
-		tokens = append(tokens, t)
 	}
 
 	if len(tokens) == 0 {
@@ -175,7 +165,7 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 				fallthrough
 			case "NotRegistered":
 				// remove the token
-				db().Exec("DELETE FROM user_fcm_tokens WHERE token=?", tokens[i])
+				rs.DeleteFCMToken(tokens[i])
 			default:
 				logErr(fmt.Errorf("error sending via fcm: %s\nuser id: %d", *result.Error, userID))
 			}

@@ -3,6 +3,7 @@ package mariadb
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -761,5 +762,22 @@ func TestDeleteFCMToken(t *testing.T) {
 	}
 	if record != nil {
 		t.Fatalf("FCM token should be nil. Found %+v", record)
+	}
+}
+
+func TestFCMTokensRaw(t *testing.T) {
+	// add a bunch of tokens for a new fictitious user
+	numTokens := 8
+	var userID int64 = 100
+	for i := 0; i < numTokens; i++ {
+		db(t).InsertFCMToken(userID, fmt.Sprintf("token-deadbeef-%d", i))
+	}
+
+	tokens, err := db(t).FCMTokensRaw(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != numTokens {
+		t.Fatalf("Only found %d tokens. Expecting %d.", len(tokens), numTokens)
 	}
 }

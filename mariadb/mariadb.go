@@ -120,6 +120,20 @@ func (mdp mariaDBProvider) FCMToken(token string) (*relstor.FCMTokenRecord, erro
 	}
 }
 
+func (mdp mariaDBProvider) FCMTokensRaw(userID int64) ([]string, error) {
+	const query = `SELECT token FROM user_fcm_tokens WHERE user_id=?`
+	tokens := make([]string, 0)
+	err := mdp.dbx.Select(&tokens, query, userID)
+	switch err {
+	case nil:
+		fallthrough
+	case sql.ErrNoRows:
+		return tokens, nil
+	default:
+		return nil, err
+	}
+}
+
 func (mdp mariaDBProvider) FCMTokenUser(userID int64, token string) (*relstor.FCMTokenRecord, error) {
 	const query = "SELECT id FROM user_fcm_tokens WHERE user_id=? AND token=?"
 	var id int64
