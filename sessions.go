@@ -127,32 +127,32 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username = strings.ToLower(username)
 
 	// find the user
-	rec, err := rs.User(username)
+	userRec, err := rs.User(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
-	if rec == nil {
+	if userRec == nil {
 		sendNotFound(w, "user not found", errorUserNotFound)
 		return
 	}
 
-	// only a subset of the user should be be returned for an authentication challenge
+	// only a subset of the user should be returned for an authentication challenge
 	user := User{
-		PublicKey:                   rec.PublicKey,
-		WrappedSecretKey:            rec.WrappedSecretKey,
-		WrappedSecretKeyNonce:       rec.WrappedSecretKeyNonce,
-		PasswordSalt:                rec.PasswordSalt,
-		PasswordHashAlgorithm:       rec.PasswordHashAlgorithm,
-		PasswordHashOperationsLimit: rec.PasswordHashOperationsLimit,
-		PasswordHashMemoryLimit:     rec.PasswordHashMemoryLimit,
+		PublicKey:                   userRec.PublicKey,
+		WrappedSecretKey:            userRec.WrappedSecretKey,
+		WrappedSecretKeyNonce:       userRec.WrappedSecretKeyNonce,
+		PasswordSalt:                userRec.PasswordSalt,
+		PasswordHashAlgorithm:       userRec.PasswordHashAlgorithm,
+		PasswordHashOperationsLimit: userRec.PasswordHashOperationsLimit,
+		PasswordHashMemoryLimit:     userRec.PasswordHashMemoryLimit,
 	}
 
 	challenge := make([]byte, 255)
 	crand.Read(challenge)
 
 	// delete any existing challenge for this user
-	err = rs.DeleteSessionChallengeUser(user.ID)
+	err = rs.DeleteSessionChallengeUser(userRec.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -160,7 +160,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	creationDate := time.Now().Unix()
 
-	err = rs.InsertSessionChallenge(user.ID, creationDate, challenge)
+	err = rs.InsertSessionChallenge(userRec.ID, creationDate, challenge)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -273,7 +273,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, loginResponse{
 		ID:                       pubID,
 		AccessToken:              accessTokenB64,
-		WrappedSymmetricKey:      user.WrappedSecretKey,
+		WrappedSymmetricKey:      user.WrappedSymmetricKey,
 		WrappedSymmetricKeyNonce: user.WrappedSymmetricKeyNonce})
 
 	go rs.DeleteSessionChallengeID(challenge.ID)
