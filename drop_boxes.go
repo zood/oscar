@@ -12,12 +12,12 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"pijun.io/pubsub"
+	"pijun.io/oscar/internal/pubsub"
 )
 
 const dropBoxIDSize = 16
 
-var dropBoxPubSub = pubsub.NewPubSub()
+var dropBoxPubSub = pubsub.New()
 
 const (
 	clientCmdNop    byte = 0
