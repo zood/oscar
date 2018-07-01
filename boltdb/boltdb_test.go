@@ -41,17 +41,23 @@ func TestPackages(t *testing.T) {
 	box1 := []byte("this is box1")
 
 	// box1 should be empty
-	pkg := db(t).PickUpPackage(box1)
+	pkg, err := db(t).PickUpPackage(box1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(pkg) != 0 {
 		t.Fatalf("the package should have been nil")
 	}
 
-	err := db(t).DropPackage(pkg1, box1)
+	err = db(t).DropPackage(pkg1, box1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pkg = db(t).PickUpPackage(box1)
+	pkg, err = db(t).PickUpPackage(box1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(pkg, pkg1) {
 		t.Fatal("Bytes did not after trying to pick up package 1")
 	}
@@ -63,7 +69,10 @@ func TestPackages(t *testing.T) {
 	}
 
 	// it should be nil now
-	pkg = db(t).PickUpPackage(box1)
+	pkg, err = db(t).PickUpPackage(box1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(pkg) != 0 {
 		t.Fatal("Box 1 should have been wiped")
 	}

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"pijun.io/oscar/internal/pubsub"
@@ -135,7 +134,10 @@ func (pl *packageListener) watch(boxID []byte) {
 	pl.subs[hexID] = sr
 
 	// if there's already a package in the dropbox, send it
-	tmp := pickUpPackage(boxID)
+	tmp, err := kvs.PickUpPackage(boxID)
+	if err != nil {
+		logErr(err)
+	}
 	if len(tmp) > 0 {
 		sub <- tmp
 	}
@@ -206,17 +208,12 @@ func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(pickUpPackage(boxID))
-}
-
-func pickUpPackage(boxID []byte) []byte {
-	var pkg []byte
-	kvdb().View(func(tx *bolt.Tx) error {
-		pkg = tx.Bucket(dropboxesBucketName).Get(boxID)
-		return nil
-	})
-
-	return pkg
+	pkg, err := kvs.PickUpPackage(boxID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
+	w.Write(pkg)
 }
 
 // sendMultiplePackagesHandler handles POST /drop-boxes/send
@@ -267,20 +264,13 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 		userID := userIDFromContext(r.Context())
 		log.Printf("drop_multiple_packages: %s => %s", rs.Username(userID), boxes)
 	}
-	err = kvdb().Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(dropboxesBucketName)
-		for hexBoxID, pkg := range pkgs {
-			boxID, _ := hex.DecodeString(hexBoxID)
-			err := bucket.Put(boxID, pkg)
-			if err != nil {
-				return err
-			}
+	for hexBoxID, pkg := range pkgs {
+		boxID, _ := hex.DecodeString(hexBoxID)
+		err := kvs.DropPackage(pkg, boxID)
+		if err != nil {
+			sendInternalErr(w, err)
+			return
 		}
-		return nil
-	})
-	if err != nil {
-		sendBadReq(w, err.Error())
-		return
 	}
 
 	sendSuccess(w, nil)
@@ -318,11 +308,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: about to update the bucket")
 	}
-	err = kvdb().Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(dropboxesBucketName)
-		err := bucket.Put(boxID, pkg)
-		return err
-	})
+	err = kvs.DropPackage(pkg, boxID)
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: bucket update error? %v", err)
 	}

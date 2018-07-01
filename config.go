@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"pijun.io/oscar/boltdb"
 	"pijun.io/oscar/mariadb"
 
 	"github.com/pkg/errors"
@@ -81,7 +82,7 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 	}
 
 	// key-value database
-	err = initKVDB(conf.KVDBPath)
+	kvs, err = boltdb.New(conf.KVDBPath)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "kv db init failed")
 	}

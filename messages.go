@@ -95,7 +95,11 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	msg := Message{}
 	msg.CipherText = body.CipherText
 	msg.Nonce = body.Nonce
-	msg.PublicSenderID = pubIDFromUserID(sessionUserID)
+	msg.PublicSenderID, err = kvs.PublicIDFromUserID(sessionUserID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
 
 	if !body.Transient {
 		msg.ID, err = rs.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
@@ -137,6 +141,11 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pubID, err := kvs.PublicIDFromUserID(rec.SenderID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
 	msg := Message{
 		ID:             rec.ID,
 		RecipientID:    rec.RecipientID,
@@ -144,7 +153,7 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		CipherText:     rec.CipherText,
 		Nonce:          rec.Nonce,
 		SentDate:       rec.SentDate,
-		PublicSenderID: pubIDFromUserID(rec.SenderID),
+		PublicSenderID: pubID,
 	}
 
 	sendSuccess(w, msg)
@@ -164,6 +173,11 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	msgs := make([]Message, 0, 0)
 	for _, r := range records {
+		pubID, err := kvs.PublicIDFromUserID(r.SenderID)
+		if err != nil {
+			sendInternalErr(w, err)
+			return
+		}
 		msg := Message{
 			ID:             r.ID,
 			RecipientID:    r.RecipientID,
@@ -171,7 +185,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 			CipherText:     r.CipherText,
 			Nonce:          r.Nonce,
 			SentDate:       r.SentDate,
-			PublicSenderID: pubIDFromUserID(r.SenderID),
+			PublicSenderID: pubID,
 		}
 		msgs = append(msgs, msg)
 	}

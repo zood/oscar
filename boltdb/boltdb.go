@@ -80,7 +80,7 @@ func (bdp boltdbProvider) InsertIds(userID int64, pubID []byte) error {
 	return tx.Commit()
 }
 
-func (bdp boltdbProvider) PickUpPackage(boxID []byte) []byte {
+func (bdp boltdbProvider) PickUpPackage(boxID []byte) ([]byte, error) {
 	var pkgCopy []byte
 	bdp.db.View(func(tx *bolt.Tx) error {
 		pkg := tx.Bucket(dropboxesBucketName).Get(boxID)
@@ -92,7 +92,7 @@ func (bdp boltdbProvider) PickUpPackage(boxID []byte) []byte {
 		}
 		return nil
 	})
-	return pkgCopy
+	return pkgCopy, nil
 }
 
 func (bdp boltdbProvider) PublicIDFromUserID(userID int64) ([]byte, error) {

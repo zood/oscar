@@ -268,7 +268,11 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := append(tokenNonce, tokenCT...)
 	accessTokenB64 := base64.StdEncoding.EncodeToString(accessToken)
 
-	pubID := pubIDFromUserID(user.ID)
+	pubID, err := kvs.PublicIDFromUserID(user.ID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
 
 	sendSuccess(w, loginResponse{
 		ID:                       pubID,

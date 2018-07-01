@@ -11,7 +11,6 @@ import (
 
 	"pijun.io/oscar/relstor"
 
-	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 )
 
@@ -46,43 +45,17 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 
-	var idBytes []byte
-	kvdb().View(func(tx *bolt.Tx) error {
-		idBytes = tx.Bucket(userIDsBucketName).Get(pubID)
-		return nil
-	})
-	if idBytes == nil {
-		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), errorUserNotFound)
+	id, err := kvs.UserIDFromPublicID(pubID)
+	if err != nil {
+		sendInternalErr(w, err)
 		return 0, false
 	}
-
-	id := bytesToInt64(idBytes)
-	if id < 0 {
+	if id < 1 {
 		sendNotFound(w, fmt.Sprintf("user '%s' not found", pubIDStr), errorUserNotFound)
 		return 0, false
 	}
 
 	return id, true
-}
-
-func userIDFromPubID(b []byte) int64 {
-	tx, err := kvdb().Begin(false)
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback()
-	userIDBytes := tx.Bucket(userIDsBucketName).Get(b)
-	return bytesToInt64(userIDBytes)
-}
-
-func pubIDFromUserID(id int64) []byte {
-	tx, err := kvdb().Begin(false)
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback()
-	pubIDBytes := tx.Bucket(publicIDsBucketName).Get(int64ToBytes(id))
-	return pubIDBytes
 }
 
 // createUserHandler handles POST /users
@@ -206,14 +179,6 @@ func createUser(user User) ([]byte, *serverError) {
 	// create an id for public use
 	pubID := make([]byte, publicUserIDSize)
 	idExists := true
-	kvTx, err := kvdb().Begin(true)
-	if err != nil {
-		logErr(err)
-		return nil, newInternalErr()
-	}
-	defer kvTx.Rollback()
-	uidsBucket := kvTx.Bucket(userIDsBucketName)
-	pubIDsBucket := kvTx.Bucket(publicIDsBucketName)
 
 	for idExists {
 		_, err = crand.Read(pubID)
@@ -223,24 +188,18 @@ func createUser(user User) ([]byte, *serverError) {
 		}
 
 		// check if the id already exists
-		val := uidsBucket.Get(pubID)
-		if val != nil {
-			// someone already has this id, let's try again
+		val, err := kvs.UserIDFromPublicID(pubID)
+		if err != nil {
+			logErr(err)
+			return nil, newInternalErr()
+		}
+		if val < 1 {
+			// someone already has this public id, let's try again
 			continue
 		}
 		idExists = false
 
-		err = uidsBucket.Put(pubID, int64ToBytes(id))
-		if err != nil {
-			logErr(err)
-			return nil, newInternalErr()
-		}
-		err = pubIDsBucket.Put(int64ToBytes(id), pubID)
-		if err != nil {
-			logErr(err)
-			return nil, newInternalErr()
-		}
-		err = kvTx.Commit()
+		err = kvs.InsertIds(id, pubID)
 		if err != nil {
 			logErr(err)
 			return nil, newInternalErr()
@@ -298,7 +257,11 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Username = username
-	user.PublicID = pubIDFromUserID(user.ID)
+	user.PublicID, err = kvs.PublicIDFromUserID(user.ID)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
 	sendSuccess(w, user)
 }
 
