@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS users (
 	wrapped_symmetric_key blob NOT NULL,
 	wrapped_symmetric_key_nonce blob NOT NULL,
 	password_salt blob NOT NULL,
-	password_hash_algorithm varchar(16) COLLATE utf8_unicode_ci DEFAULT NULL,
+	password_hash_algorithm varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
 	password_hash_operations_limit bigint(11) NOT NULL,
 	password_hash_memory_limit bigint(11) NOT NULL,
 	email varchar(254) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
