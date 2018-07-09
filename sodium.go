@@ -4,6 +4,7 @@ package main
 #cgo LDFLAGS: -lsodium
 
 #include <sodium.h>
+#include <stdlib.h>
 */
 import "C"
 import (
@@ -11,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"unsafe"
 )
 
 func init() {
@@ -44,6 +46,7 @@ func (kp keyPair) String() string {
 func stretchPassword(keySize int, pw string, salt []byte) ([]byte, error) {
 	key := make([]byte, keySize)
 	pwc := C.CString(pw)
+	defer C.free(unsafe.Pointer(pwc))
 	result := C.crypto_pwhash(
 		(*C.uchar)(&key[0]),
 		C.ulonglong(keySize),
