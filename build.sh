@@ -3,4 +3,4 @@
 set -e
 
 export BUILD_TIME=`date -u +%Y-%m-%d-%I:%M:%S`
-go build -i -ldflags "-X main.ServerBuildTime=$BUILD_TIME -s -w" -o oscar
+go build -i -ldflags "-X main.ServerBuildTime=$BUILD_TIME -s -w -linkmode external -extldflags -static" -o oscar
