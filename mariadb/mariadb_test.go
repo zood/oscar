@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS session_challenges (
 	PRIMARY KEY (id)
   ) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;`
 
+const createUserAPNSTokensTable = `
+CREATE TABLE IF NOT EXISTS user_apns_tokens (
+	id int(11) unsigned NOT NULL AUTO_INCREMENT,
+	user_id int(11) NOT NULL,
+	token varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+	PRIMARY KEY (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`
+
 const createUserFcmTokensTable = `
 CREATE TABLE IF NOT EXISTS user_fcm_tokens (
 	id int(11) unsigned NOT NULL AUTO_INCREMENT,
@@ -77,6 +85,7 @@ CREATE TABLE IF NOT EXISTS users (
 var dbTables = map[string]string{
 	"users":                     createUsersTable,
 	"user_fcm_tokens":           createUserFcmTokensTable,
+	"user_apns_tokens":          createUserAPNSTokensTable,
 	"session_challenges":        createSessionChallengesTable,
 	"messages":                  createMessagesTable,
 	"email_verification_tokens": createEmailVerificationTokensTable,
@@ -89,6 +98,8 @@ const aliceVerificationToken = "0123456789abcdef"
 const bobVerificationToken = "fedcba9876543210"
 const aliceFCMToken = "an-fcm-token-from-google"
 const bobFCMToken = "an-fcm-token-for-bob"
+const aliceAPNSToken = "an-apns-token-from-apple"
+const bobAPNSToken = "an-apns-token-for-bob"
 
 var msgAB relstor.MessageRecord
 var msgBA relstor.MessageRecord
@@ -774,6 +785,176 @@ func TestFCMTokensRaw(t *testing.T) {
 	}
 
 	tokens, err := db(t).FCMTokensRaw(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != numTokens {
+		t.Fatalf("Only found %d tokens. Expecting %d.", len(tokens), numTokens)
+	}
+}
+
+// // // // // // // ---------------------------------
+
+// ------------------------------------------------------
+func TestInsertAndGetAPNSToken(t *testing.T) {
+	err := db(t).InsertAPNSToken(alice.ID, aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// now try to retrieve it
+	record, err := db(t).APNSToken(aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record == nil {
+		t.Fatalf("Unable to retrieve APNS token")
+	}
+	if record.ID < 1 {
+		t.Fatalf("Invalid id for APNS token record: %d", record.ID)
+	}
+	if record.Token != aliceAPNSToken {
+		t.Fatalf("Token does not match: %s != %s", record.Token, aliceAPNSToken)
+	}
+	if record.UserID != alice.ID {
+		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
+	}
+
+	// now try to retrieve it another way
+	record, err = db(t).APNSTokenUser(alice.ID, aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record == nil {
+		t.Fatalf("Unable to retrieve APNS token")
+	}
+	if record.ID < 1 {
+		t.Fatalf("Invalid id for APNS token record: %d", record.ID)
+	}
+	if record.Token != aliceAPNSToken {
+		t.Fatalf("Token does not match: %s != %s", record.Token, aliceAPNSToken)
+	}
+	if record.UserID != alice.ID {
+		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
+	}
+}
+
+func TestGetAPNSTokenInvalid(t *testing.T) {
+	token := "not-a-real-token"
+	record, err := db(t).APNSToken(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record != nil {
+		t.Fatalf("Should not have received a record. Got %+v", record)
+	}
+
+	// Bob's user id, but alice's token
+	record, err = db(t).APNSTokenUser(bob.ID, aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record != nil {
+		t.Fatalf("Should not have received a record. Got %+v", record)
+	}
+}
+
+func TestUpdateUserIDofAPNSToken(t *testing.T) {
+	// Alice has logged out of her phone, and Bob has logged in, thus taking over the device's FCM token
+	err := db(t).UpdateUserIDOfAPNSToken(bob.ID, aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make sure we get the correct record now when we retrieve it
+	record, err := db(t).APNSToken(aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record == nil {
+		t.Fatal("APNS token record should not be nil")
+	}
+	if record.Token != aliceAPNSToken {
+		t.Fatalf("token mismatch: %s != %s", record.Token, aliceAPNSToken)
+	}
+	if record.UserID != bob.ID {
+		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
+	}
+}
+
+func TestReplaceAPNSToken(t *testing.T) {
+	// Now that Bob has logged in to the device, time has passed and his APNS token has been updated
+	rowsAffected, err := db(t).ReplaceAPNSToken(aliceAPNSToken, bobAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rowsAffected != 1 {
+		t.Fatalf("Rows affected was not 1. Was %d", rowsAffected)
+	}
+
+	// make sure we get the correct record when retrieving it
+	record, err := db(t).APNSToken(bobAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record == nil {
+		t.Fatal("APNS token record should not be nil")
+	}
+	if record.Token != bobAPNSToken {
+		t.Fatalf("token mismatch: %s != %s", record.Token, aliceAPNSToken)
+	}
+	if record.UserID != bob.ID {
+		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
+	}
+}
+
+func TestDeleteAPNSTokenOfUser(t *testing.T) {
+	err := db(t).DeleteAPNSTokenOfUser(bob.ID, bobAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make sure it can't be retrieved
+	record, err := db(t).APNSToken(bobAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record != nil {
+		t.Fatalf("APNS token should be nil. Found %+v", record)
+	}
+}
+
+func TestDeleteAPNSToken(t *testing.T) {
+	// insert a token for alice, then delete it
+	err := db(t).InsertAPNSToken(alice.ID, aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db(t).DeleteAPNSToken(aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// we should not be able to retrieve the token record anymore
+	record, err := db(t).APNSToken(aliceAPNSToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record != nil {
+		t.Fatalf("APNS token should be nil. Found %+v", record)
+	}
+}
+
+func TestAPNSTokensRaw(t *testing.T) {
+	// add a bunch of tokens for a new fictitious user
+	numTokens := 8
+	var userID int64 = 100
+	for i := 0; i < numTokens; i++ {
+		db(t).InsertAPNSToken(userID, fmt.Sprintf("token-livebeef-%d", i))
+	}
+
+	tokens, err := db(t).APNSTokensRaw(100)
 	if err != nil {
 		t.Fatal(err)
 	}

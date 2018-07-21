@@ -1,5 +1,12 @@
 package relstor
 
+// APNSTokenRecord represents a row in the user_apns_tokens table
+type APNSTokenRecord struct {
+	ID     int64  `db:"id"`
+	UserID int64  `db:"user_id"`
+	Token  string `db:"token"`
+}
+
 // EmailVerificationTokenRecord represents a row in the email_verification_tokens table
 type EmailVerificationTokenRecord struct {
 	UserID   int64  `db:"user_id"`
@@ -53,6 +60,11 @@ type UserRecord struct {
 // The interface exists as an intermediary, so unit tests can be written against the oscar code
 // with a stubbed out relational database.
 type Provider interface {
+	APNSToken(token string) (*APNSTokenRecord, error)
+	APNSTokensRaw(userID int64) ([]string, error)
+	APNSTokenUser(userID int64, token string) (*APNSTokenRecord, error)
+	DeleteAPNSToken(token string) error
+	DeleteAPNSTokenOfUser(userID int64, token string) error
 	DeleteFCMToken(token string) error
 	DeleteFCMTokenOfUser(userID int64, token string) error
 	DeleteMessageToRecipient(recipientID, msgID int64) error
@@ -63,6 +75,7 @@ type Provider interface {
 	FCMToken(token string) (*FCMTokenRecord, error)
 	FCMTokensRaw(userID int64) ([]string, error)
 	FCMTokenUser(userID int64, token string) (*FCMTokenRecord, error)
+	InsertAPNSToken(userID int64, token string) error
 	InsertFCMToken(userID int64, token string) error
 	InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error)
 	InsertSessionChallenge(userID int64, creationDate int64, challenge []byte) error
@@ -71,8 +84,10 @@ type Provider interface {
 	LimitedUserInfoID(userID int64) (username string, pubKey []byte, err error)
 	MessageRecords(recipientID int64) ([]MessageRecord, error)
 	MessageToRecipient(recipientID, msgID int64) (*MessageRecord, error)
+	ReplaceAPNSToken(old, new string) (rowsAffected int64, err error)
 	ReplaceFCMToken(old, new string) (rowsAffected int64, err error)
 	SessionChallenge(userID int64) (*SessionChallengeRecord, error)
+	UpdateUserIDOfAPNSToken(newUserID int64, token string) error
 	UpdateUserIDOfFCMToken(newUserID int64, token string) error
 	User(username string) (*UserRecord, error)
 	Username(userID int64) string

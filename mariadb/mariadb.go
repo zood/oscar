@@ -15,6 +15,7 @@ const (
 	tableEmailVerificationTokens string = "email_verification_tokens"
 	tableMessages                       = "messages"
 	tableSessionChallenges              = "session_challenges"
+	tableUserAPNSTokens                 = "user_apns_tokens"
 	tableUserFCMTokens                  = "user_fcm_tokens"
 	tableUsers                          = "users"
 )
@@ -45,6 +46,60 @@ func New(sqlDSN string) (relstor.Provider, error) {
 type mariaDBProvider struct {
 	db  *sql.DB
 	dbx *sqlx.DB
+}
+
+func (mdp mariaDBProvider) APNSToken(token string) (*relstor.APNSTokenRecord, error) {
+	const query = `SELECT id, user_id FROM user_apns_tokens WHERE token=?`
+	ftr := relstor.APNSTokenRecord{Token: token}
+	err := mdp.dbx.QueryRowx(query, token).StructScan(&ftr)
+	switch err {
+	case nil:
+		return &ftr, nil
+	case sql.ErrNoRows:
+		return nil, nil
+	default:
+		return nil, err
+	}
+}
+
+func (mdp mariaDBProvider) APNSTokensRaw(userID int64) ([]string, error) {
+	const query = `SELECT token FROM user_apns_tokens WHERE user_id=?`
+	tokens := make([]string, 0)
+	err := mdp.dbx.Select(&tokens, query, userID)
+	switch err {
+	case nil:
+		fallthrough
+	case sql.ErrNoRows:
+		return tokens, nil
+	default:
+		return nil, err
+	}
+}
+
+func (mdp mariaDBProvider) APNSTokenUser(userID int64, token string) (*relstor.APNSTokenRecord, error) {
+	const query = "SELECT id FROM user_apns_tokens WHERE user_id=? AND token=?"
+	var id int64
+	err := mdp.dbx.QueryRow(query, userID, token).Scan(&id)
+	switch err {
+	case nil:
+		return &relstor.APNSTokenRecord{ID: id, UserID: userID, Token: token}, nil
+	case sql.ErrNoRows:
+		return nil, nil
+	default:
+		return nil, err
+	}
+}
+
+func (mdp mariaDBProvider) DeleteAPNSToken(token string) error {
+	const query = `DELETE FROM user_apns_tokens WHERE token=?`
+	_, err := mdp.dbx.Exec(query, token)
+	return err
+}
+
+func (mdp mariaDBProvider) DeleteAPNSTokenOfUser(userID int64, token string) error {
+	const query = `DELETE FROM user_apns_tokens WHERE user_id=? AND token=?`
+	_, err := mdp.dbx.Exec(query, userID, token)
+	return err
 }
 
 func (mdp mariaDBProvider) DeleteFCMToken(token string) error {
@@ -146,6 +201,12 @@ func (mdp mariaDBProvider) FCMTokenUser(userID int64, token string) (*relstor.FC
 	default:
 		return nil, err
 	}
+}
+
+func (mdp mariaDBProvider) InsertAPNSToken(userID int64, token string) error {
+	const query = `INSERT INTO user_apns_tokens (user_id, token) VALUES (?, ?)`
+	_, err := mdp.dbx.Exec(query, userID, token)
+	return err
 }
 
 func (mdp mariaDBProvider) InsertFCMToken(userID int64, token string) error {
@@ -297,6 +358,20 @@ func (mdp mariaDBProvider) MessageToRecipient(recipientID, msgID int64) (*relsto
 	return &msg, nil
 }
 
+func (mdp mariaDBProvider) ReplaceAPNSToken(old, new string) (rowsAffected int64, err error) {
+	const query = `UPDATE user_apns_tokens SET token=? WHERE token=?`
+	var result sql.Result
+	result, err = mdp.dbx.Exec(query, new, old)
+	if err != nil {
+		return 0, errors.Wrap(err, "Failed to execute update query")
+	}
+	rowsAffected, err = result.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "Failure trying to get affected rows count")
+	}
+	return rowsAffected, nil
+}
+
 func (mdp mariaDBProvider) ReplaceFCMToken(old, new string) (rowsAffected int64, err error) {
 	const query = `UPDATE user_fcm_tokens SET token=? WHERE token=?`
 	var result sql.Result
@@ -325,6 +400,12 @@ func (mdp mariaDBProvider) SessionChallenge(userID int64) (*relstor.SessionChall
 	default:
 		return nil, errors.Wrap(err, "Unable to query for session challenge")
 	}
+}
+
+func (mdp mariaDBProvider) UpdateUserIDOfAPNSToken(newUserID int64, token string) error {
+	const query = `UPDATE user_apns_tokens SET user_id=? WHERE token=?`
+	_, err := mdp.dbx.Exec(query, newUserID, token)
+	return err
 }
 
 func (mdp mariaDBProvider) UpdateUserIDOfFCMToken(newUserID int64, token string) error {

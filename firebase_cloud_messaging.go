@@ -55,7 +55,7 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 	}
 
 	if len(tokens) == 0 {
-		log.Printf("  no tokens for %d", userID)
+		log.Printf("  no FMC tokens for %d", userID)
 		return
 	}
 	priority := ""

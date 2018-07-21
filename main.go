@@ -93,6 +93,8 @@ func main() {
 func installEndPoints(r *mux.Router) {
 	r.Handle("/users", logHandler(sessionHandler(searchUsersHandler))).Methods("GET")
 	r.Handle("/users", logHandler(createUserHandler)).Methods("POST")
+	r.Handle("/users/me/apns-tokens", logHandler(sessionHandler(addAPNSTokenHandler))).Methods(http.MethodPost)
+	r.Handle("/users/me/apns-tokens/{token}", logHandler(sessionHandler(deleteAPNSTokenHandler))).Methods(http.MethodDelete)
 	r.Handle("/users/me/fcm-tokens", logHandler(sessionHandler(addFCMTokenHandler))).Methods("POST")
 	r.Handle("/users/me/fcm-tokens/{token}", logHandler(sessionHandler(deleteFCMTokenHandler))).Methods("DELETE")
 	r.Handle("/users/me/backup", logHandler(sessionHandler(retrieveBackupHandler))).Methods("GET")
