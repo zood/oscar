@@ -1,7 +1,7 @@
 package main
 
 /*
-#cgo LDFLAGS: -lsodium
+#cgo LDFLAGS: /usr/local/lib/libsodium.a
 
 #include <sodium.h>
 #include <stdlib.h>
