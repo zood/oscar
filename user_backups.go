@@ -47,7 +47,7 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		sendBadReq(w, "Unable to PUT body: "+err.Error())
+		sendBadReq(w, "Unable to read PUT body: "+err.Error())
 		return
 	}
 
