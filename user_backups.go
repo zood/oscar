@@ -53,14 +53,14 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strconv.FormatInt(userID, 10) + ".db"
-	bkt, err := fs.Bucket(name)
+	bkt, err := fs.Bucket(userDBsBucketName)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
 	rdr := bytes.NewReader(buf)
+	name := strconv.FormatInt(userID, 10) + ".db"
 	err = bkt.WriteObject(name, rdr)
 	if err != nil {
 		sendInternalErr(w, err)
