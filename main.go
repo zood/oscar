@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"pijun.io/oscar/filestor"
 	"pijun.io/oscar/kvstor"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -29,6 +30,7 @@ var defaultCiphers = []uint16{
 
 var rs relstor.Provider
 var kvs kvstor.Provider
+var fs filestor.Provider
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)

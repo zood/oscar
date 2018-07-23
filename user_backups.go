@@ -1,16 +1,14 @@
 package main
 
 import (
-	"io"
+	"bytes"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 )
 
-var userDBBackupFiles string
+const userDBsBucketName = "db_backups"
 
 func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
@@ -18,25 +16,29 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("download_backup: %s", rs.Username(userID))
 	}
 
-	fileLoc := filepath.Join(userDBBackupFiles, strconv.FormatInt(userID, 10)+".db")
-	_, err := os.Stat(fileLoc)
-	if err != nil {
-		if os.IsNotExist(err) {
-			sendNotFound(w, "no backup found", errorBackupNotFound)
-		} else {
-			sendInternalErr(w, err)
-		}
-		return
-	}
-
-	file, err := os.Open(fileLoc)
+	bkt, err := fs.Bucket(userDBsBucketName)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
-	defer file.Close()
+	name := strconv.FormatInt(userID, 10) + ".db"
+	exists, err := bkt.ObjectExists(name)
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
+	if !exists {
+		sendNotFound(w, "no backup found", errorBackupNotFound)
+		return
+	}
 
-	io.Copy(w, file)
+	w.WriteHeader(http.StatusOK)
+	err = bkt.ReadObject(name, w)
+	if err != nil {
+		// we don't send anything else, because the stream is probably already corrupted
+		// by the ReadObject call
+		logErr(err)
+	}
 }
 
 func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,22 +53,19 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileLoc := filepath.Join(userDBBackupFiles, strconv.FormatInt(userID, 10)+".db")
-	file, err := os.Create(fileLoc)
+	name := strconv.FormatInt(userID, 10) + ".db"
+	bkt, err := fs.Bucket(name)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
-	defer file.Close()
 
-	_, err = file.Write(buf)
+	rdr := bytes.NewReader(buf)
+	err = bkt.WriteObject(name, rdr)
 	if err != nil {
 		sendInternalErr(w, err)
-		file.Close()
-		os.Remove(fileLoc)
 		return
 	}
-	file.Close()
 
 	sendSuccess(w, nil)
 }

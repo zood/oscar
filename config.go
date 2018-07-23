@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"pijun.io/oscar/boltdb"
+	"pijun.io/oscar/localdisk"
 	"pijun.io/oscar/mariadb"
 
 	"github.com/pkg/errors"
@@ -18,13 +19,14 @@ type configuration struct {
 		Public string `json:"public"`
 		Secret string `json:"secret"`
 	} `json:"asymmetric_keys"`
-	SQLDSN       string `json:"sql_dsn"`
-	Port         *int   `json:"port,omitempty"`
-	KVDBPath     string `json:"kv_db_path"`
-	BackupsPath  string `json:"backups_path"`
-	FCMServerKey string `json:"fcm_server_key"`
-	TLS          *bool  `json:"tls,omitempty"`
-	Email        struct {
+	SQLDSN               string `json:"sql_dsn"`
+	Port                 *int   `json:"port,omitempty"`
+	KVDBPath             string `json:"kv_db_path"`
+	BackupsPath          string `json:"backups_path"`
+	LocalDiskStoragePath string `json:"local_disk_storage_path"`
+	FCMServerKey         string `json:"fcm_server_key"`
+	TLS                  *bool  `json:"tls,omitempty"`
+	Email                struct {
 		SMTPUser     string `json:"smtp_user"`
 		SMTPPassword string `json:"smtp_password"`
 		SMTPServer   string `json:"smtp_server"`
@@ -87,10 +89,21 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 		return 0, false, errors.Wrap(err, "kv db init failed")
 	}
 
-	if conf.BackupsPath == "" {
-		return 0, false, errors.New("user database backups path is empty")
+	// file storage
+	fs, err = localdisk.New(conf.LocalDiskStoragePath)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "failed to init localdisk storage")
 	}
-	userDBBackupFiles = conf.BackupsPath
+
+	// create all the buckets we need
+	bkt, err := fs.Bucket(userDBsBucketName)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "failed to retrieve bucket for user db backups")
+	}
+	err = bkt.Create()
+	if err != nil {
+		return 0, false, errors.Wrap(err, "failed to create bucket for user dbs backup")
+	}
 
 	// TLS info
 	if conf.Port == nil {
