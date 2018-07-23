@@ -69,9 +69,8 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Starting server on port %d", *cfg.Port)
+	log.Printf("Starting server for %s:%d", cfg.Hostname, *cfg.Port)
 	if *cfg.TLS {
-		log.Printf("Hostname: %s", cfg.Hostname)
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers
 		tlsConfig.MinVersion = tls.VersionTLS12
@@ -87,6 +86,7 @@ func main() {
 		}
 		tlsConfig.GetCertificate = m.GetCertificate
 		server.TLSConfig = tlsConfig
+		go http.ListenAndServe(":http", m.HTTPHandler(nil)) // this just runs for the sake of the autocert manager
 		log.Fatal(server.ListenAndServeTLS("", ""))
 	} else {
 		log.Fatal(server.ListenAndServe())
