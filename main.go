@@ -45,7 +45,7 @@ func main() {
 
 	currLogLevel = logLevel(*lvl)
 
-	port, tlsEnabled, err := applyConfigFile(*configPath)
+	cfg, err := applyConfigFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func main() {
 
 	// playground()
 
-	hostAddress := fmt.Sprintf(":%d", port)
+	hostAddress := fmt.Sprintf(":%d", *cfg.Port)
 	server := http.Server{
 		Addr:         hostAddress,
 		Handler:      r,
@@ -69,8 +69,9 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Starting server on port %d", port)
-	if tlsEnabled {
+	log.Printf("Starting server on port %d", *cfg.Port)
+	if *cfg.TLS {
+		log.Printf("Hostname: %s", cfg.Hostname)
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers
 		tlsConfig.MinVersion = tls.VersionTLS12
@@ -81,7 +82,7 @@ func main() {
 		}
 		m := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist("api.pijun.io"),
+			HostPolicy: autocert.HostWhitelist(cfg.Hostname),
 			Cache:      autocert.DirCache("./"),
 		}
 		tlsConfig.GetCertificate = m.GetCertificate

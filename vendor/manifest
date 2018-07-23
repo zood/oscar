@@ -93,7 +93,7 @@
 			"importpath": "golang.org/x/crypto/acme",
 			"repository": "https://go.googlesource.com/crypto",
 			"vcs": "git",
-			"revision": "f6b343c37ca80bfa8ea539da67a0b621f84fab1d",
+			"revision": "c126467f60eb25f8f27e5a981f32a87e3965053f",
 			"branch": "master",
 			"path": "acme",
 			"notests": true

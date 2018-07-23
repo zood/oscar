@@ -22,9 +22,9 @@ type configuration struct {
 	SQLDSN               string `json:"sql_dsn"`
 	Port                 *int   `json:"port,omitempty"`
 	KVDBPath             string `json:"kv_db_path"`
-	BackupsPath          string `json:"backups_path"`
 	LocalDiskStoragePath string `json:"local_disk_storage_path"`
 	FCMServerKey         string `json:"fcm_server_key"`
+	Hostname             string `json:"hostname"`
 	TLS                  *bool  `json:"tls,omitempty"`
 	Email                struct {
 		SMTPUser     string `json:"smtp_user"`
@@ -34,75 +34,75 @@ type configuration struct {
 	}
 }
 
-func applyConfigFile(confPath string) (port int, tls bool, err error) {
+func applyConfigFile(confPath string) (*configuration, error) {
 	f, err := os.Open(confPath)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "unable to open config file")
+		return nil, errors.Wrap(err, "unable to open config file")
 	}
 
 	conf := configuration{}
 	err = json.NewDecoder(f).Decode(&conf)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "unable to parse config file")
+		return nil, errors.Wrap(err, "unable to parse config file")
 	}
 
 	// symmetric key
 	oscarSymKey, err = hex.DecodeString(conf.SymmetricKey)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "sym key decode failed")
+		return nil, errors.Wrap(err, "sym key decode failed")
 	}
 	if len(oscarSymKey) != secretBoxKeySize {
-		return 0, false, fmt.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), secretBoxKeySize)
+		return nil, fmt.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), secretBoxKeySize)
 	}
 
 	// public/private keys
 	oscarKeyPair.public, err = hex.DecodeString(conf.AsymmetricKeys.Public)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "asym public key decode failed")
+		return nil, errors.Wrap(err, "asym public key decode failed")
 	}
 	oscarKeyPair.secret, err = hex.DecodeString(conf.AsymmetricKeys.Secret)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "asym secret key decode failed")
+		return nil, errors.Wrap(err, "asym secret key decode failed")
 	}
 	if len(oscarKeyPair.public) != publicKeySize {
-		return 0, false, fmt.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.public), publicKeySize)
+		return nil, fmt.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.public), publicKeySize)
 	}
 	if len(oscarKeyPair.secret) != secretKeySize {
-		return 0, false, fmt.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.secret), secretKeySize)
+		return nil, fmt.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.secret), secretKeySize)
 	}
 
 	// Firebase cloud messaging
 	if conf.FCMServerKey == "" {
-		return 0, false, errors.New("fcm_server_key is empty/missing")
+		return nil, errors.New("fcm_server_key is empty/missing")
 	}
 	gFCMServerKey = conf.FCMServerKey
 
 	// sql database
 	rs, err = mariadb.New(conf.SQLDSN)
 	if err != nil {
-		return 0, false, err
+		return nil, err
 	}
 
 	// key-value database
 	kvs, err = boltdb.New(conf.KVDBPath)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "kv db init failed")
+		return nil, errors.Wrap(err, "kv db init failed")
 	}
 
 	// file storage
 	fs, err = localdisk.New(conf.LocalDiskStoragePath)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "failed to init localdisk storage")
+		return nil, errors.Wrap(err, "failed to init localdisk storage")
 	}
 
 	// create all the buckets we need
 	bkt, err := fs.Bucket(userDBsBucketName)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "failed to retrieve bucket for user db backups")
+		return nil, errors.Wrap(err, "failed to retrieve bucket for user db backups")
 	}
 	err = bkt.Create()
 	if err != nil {
-		return 0, false, errors.Wrap(err, "failed to create bucket for user dbs backup")
+		return nil, errors.Wrap(err, "failed to create bucket for user dbs backup")
 	}
 
 	// TLS info
@@ -115,6 +115,12 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 		tls := true
 		conf.TLS = &tls
 	}
+	if *conf.TLS {
+		// make sure we have a hostname
+		if conf.Hostname == "" {
+			return nil, errors.New("Hostname is required when TLS is enabled")
+		}
+	}
 
 	// SMTP client info
 	emailConfiguration.smtpUser = conf.Email.SMTPUser
@@ -122,5 +128,5 @@ func applyConfigFile(confPath string) (port int, tls bool, err error) {
 	emailConfiguration.smtpServer = conf.Email.SMTPServer
 	emailConfiguration.smtpPort = conf.Email.SMTPPort
 
-	return *conf.Port, *conf.TLS, nil
+	return &conf, nil
 }
