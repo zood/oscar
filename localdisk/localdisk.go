@@ -16,7 +16,7 @@ type localDiskProvider struct {
 }
 
 // New returns a filestor.Provider backed by the system's local disk
-func New(rootDir string) (filestor.Provider, error) {
+func New(rootDir string) (filestor.Provider3, error) {
 	if rootDir == "" {
 		return nil, errors.New("You need to provide a valid path to localdisk")
 	}

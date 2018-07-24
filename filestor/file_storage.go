@@ -5,13 +5,22 @@ import (
 	"io"
 )
 
+// Provider is the set of functionality required by oscar of a file storage system.
+type Provider interface {
+	ReadFile(relPath string, dst io.Writer) error
+	WriteFile(relPath string, src io.Reader) error
+}
+
 // ErrInvalidName indicates the Bucket or Object name is invalid
 var ErrInvalidName = errors.New("Invalid name")
 
-// Provider is the set of functionality required by oscar of a file storage system.
+// ErrFileNotExist indicates the files does not exist
+var ErrFileNotExist = errors.New("File does not exist")
+
+// Provider3 is the set of functionality required by oscar of a file storage system.
 // The interface exists to make it easy to swap out storage mechanisms (local disk,
 // google cloud storage, aws s3, etc.)
-type Provider interface {
+type Provider3 interface {
 	Bucket(name string) (Bucket, error)
 }
 

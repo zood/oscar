@@ -3,37 +3,57 @@ package gcs
 import (
 	"context"
 	"errors"
-	"os"
-	"strings"
+	"io"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/option"
 	"pijun.io/oscar/filestor"
 )
 
 type gcsProvider struct {
-	client    *storage.Client
-	projectID string
+	bucket *storage.BucketHandle
+	client *storage.Client
 }
 
 // New returns a filestor.Provider backed by Google Cloud Storage
-func New(projectID string) (filestor.Provider, error) {
-	if projectID == "" {
-		return nil, errors.New("project id is missing")
+func New(credsPath string) (filestor.Provider, error) {
+	if credsPath == "" {
+		return nil, errors.New("must provide the credentials file path")
 	}
-	client, err := storage.NewClient(context.Background())
+	client, err := storage.NewClient(context.Background(), option.WithCredentialsFile(credsPath))
+	if err != nil {
+		return nil, err
+	}
+	bkt := client.Bucket("api-pijun-io")
+	_, err = bkt.Attrs(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
 	return gcsProvider{
-		client:    client,
-		projectID: projectID,
+		bucket: bkt,
+		client: client,
 	}, nil
 }
 
-func (gp gcsProvider) Bucket(name string) (filestor.Bucket, error) {
-	if strings.ContainsRune(name, os.PathSeparator) {
-		return nil, filestor.ErrInvalidName
+func (gp gcsProvider) ReadFile(relPath string, dst io.Writer) error {
+	obj := gp.bucket.Object(relPath)
+	rdr, err := obj.NewReader(context.Background())
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return filestor.ErrFileNotExist
+		}
+		return err
 	}
-	return gcsBucket{bkt: gp.client.Bucket(name)}, nil
+
+	_, err = io.Copy(dst, rdr)
+	return err
+}
+
+func (gp gcsProvider) WriteFile(relPath string, src io.Reader) error {
+	obj := gp.bucket.Object(relPath)
+	dst := obj.NewWriter(context.Background())
+	defer dst.Close()
+	_, err := io.Copy(dst, src)
+	return err
 }

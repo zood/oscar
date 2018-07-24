@@ -11,7 +11,7 @@ import (
 	"pijun.io/oscar/filestor"
 )
 
-func provider() filestor.Provider {
+func provider() filestor.Provider3 {
 	root := filepath.Join(os.TempDir(), fmt.Sprintf("%d", time.Now().UnixNano()))
 	os.MkdirAll(root, 0755)
 	p, _ := New(root)

@@ -26,6 +26,7 @@ type configuration struct {
 	FCMServerKey         string `json:"fcm_server_key"`
 	Hostname             string `json:"hostname"`
 	TLS                  *bool  `json:"tls,omitempty"`
+	GCPCredentialsPath   string `json:"gcp_credentials_path"`
 	Email                struct {
 		SMTPUser     string `json:"smtp_user"`
 		SMTPPassword string `json:"smtp_password"`
@@ -120,6 +121,15 @@ func applyConfigFile(confPath string) (*configuration, error) {
 		if conf.Hostname == "" {
 			return nil, errors.New("Hostname is required when TLS is enabled")
 		}
+	}
+
+	if conf.GCPCredentialsPath == "" {
+		return nil, errors.New("must supply the 'gcp_credentials_path'")
+	}
+	// make sure the file exists
+	_, err = os.Stat(conf.GCPCredentialsPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to stat gcp credentials")
 	}
 
 	// SMTP client info
