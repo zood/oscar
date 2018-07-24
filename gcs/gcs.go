@@ -16,15 +16,18 @@ type gcsProvider struct {
 }
 
 // New returns a filestor.Provider backed by Google Cloud Storage
-func New(credsPath string) (filestor.Provider, error) {
+func New(credsPath, bucketName string) (filestor.Provider, error) {
 	if credsPath == "" {
 		return nil, errors.New("must provide the credentials file path")
+	}
+	if bucketName == "" {
+		return nil, errors.New("must provide a bucket name")
 	}
 	client, err := storage.NewClient(context.Background(), option.WithCredentialsFile(credsPath))
 	if err != nil {
 		return nil, err
 	}
-	bkt := client.Bucket("api-pijun-io")
+	bkt := client.Bucket(bucketName)
 	_, err = bkt.Attrs(context.Background())
 	if err != nil {
 		return nil, err

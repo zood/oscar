@@ -11,7 +11,7 @@ import (
 	"pijun.io/oscar/filestor"
 )
 
-func provider() filestor.Provider3 {
+func provider() filestor.Provider {
 	root := filepath.Join(os.TempDir(), fmt.Sprintf("%d", time.Now().UnixNano()))
 	os.MkdirAll(root, 0755)
 	p, _ := New(root)
@@ -50,102 +50,61 @@ func TestProviderCreation(t *testing.T) {
 	}
 }
 
-func TestBucketRetrieval(t *testing.T) {
+func TestReadNonExistentObject(t *testing.T) {
 	p := provider()
-	name := "test123"
-	badName := name + string(os.PathSeparator)
-	bkt, err := p.Bucket(badName)
-	if err != filestor.ErrInvalidName {
-		t.Fatalf("Should have failed with a bad bucket name, but got %v", err)
-	}
-
-	bkt, err = p.Bucket(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exists, err := bkt.Exists()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exists {
-		t.Fatalf("Bucket shouldn't exist yet")
-	}
-
-	err = bkt.Create()
-
-}
-
-func TestBucketCreation(t *testing.T) {
-	p := provider()
-	bkt, _ := p.Bucket("not-created-yet")
-
-	err := bkt.Create()
-	if err != nil {
-		t.Fatalf("Bucket creation failed: %v", err)
-	}
-
-	exists, err := bkt.Exists()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !exists {
-		t.Fatalf("Bucket should exist now")
-	}
-}
-
-func TestObjectCreation(t *testing.T) {
-	// just ignore all errors from these first calls, because they get tested elsewhere
-	p := provider()
-	bkt, _ := p.Bucket("put-objects-here")
-	bkt.Create()
-
-	data := []byte("rock a bye baby, on the tree top")
-	rdr := bytes.NewReader(data)
-
-	if err := bkt.WriteObject("lyrics.txt", rdr); err != nil {
-		t.Fatal(err)
-	}
+	fp := filepath.Join("somedir", "should-not-exist")
 
 	dst := &bytes.Buffer{}
-	if err := bkt.ReadObject("lyrics.txt", dst); err != nil {
-		t.Fatal(err)
-	}
-
-	if !bytes.Equal(dst.Bytes(), data) {
-		t.Fatalf("object did not match after reading it back: Got '%s'", string(dst.Bytes()))
+	err := p.ReadFile(fp, dst)
+	if err != filestor.ErrFileNotExist {
+		t.Fatalf("Should have received 'file not exist'. Got %v", err)
 	}
 }
 
-func TestObjectExistence(t *testing.T) {
+func TestWriteNewFile(t *testing.T) {
 	p := provider()
-	bkt, _ := p.Bucket("put-objects-here")
-	bkt.Create()
+	fp := filepath.Join("anotherdir", "lyrics.txt")
 
-	name := "notes.txt"
-	badName := name + string(os.PathSeparator)
-	// test it with a bad name
-	_, err := bkt.ObjectExists(badName)
-	if err != filestor.ErrInvalidName {
-		t.Fatalf("Should have failed with an invalid name, but ot %v", err)
-	}
-
-	exists, err := bkt.ObjectExists(name)
+	data := []byte("Hello, darkness, my old friend")
+	src := bytes.NewBuffer(data)
+	err := p.WriteFile(fp, src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exists {
-		t.Fatal("This object shouldn't exist yet")
-	}
 
-	data := []byte("We're all we need")
-	src := bytes.NewReader(data)
-	bkt.WriteObject(name, src)
-	exists, err = bkt.ObjectExists(name)
+	// read it back
+	dst := &bytes.Buffer{}
+	err = p.ReadFile(fp, dst)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !exists {
-		t.Fatal("This file should exist now")
+	if !bytes.Equal(dst.Bytes(), data) {
+		t.Fatalf("data read back is not correct. Got '%s'", string(dst.Bytes()))
+	}
+}
+
+func TestUpdateFile(t *testing.T) {
+	p := provider()
+	fp := filepath.Join("yetanotherdir", "list.txt")
+	data1 := []byte("*Eggs\n*Milk\n")
+	src := bytes.NewBuffer(data1)
+	p.WriteFile(fp, src)
+
+	// now overwrite it
+	data2 := []byte("*Eggs\n*Milk\n*Orange juice\n")
+	src = bytes.NewBuffer(data2)
+	err := p.WriteFile(fp, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// read it back to make sure the update worked
+	dst := &bytes.Buffer{}
+	err = p.ReadFile(fp, dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(dst.Bytes(), data2) {
+		t.Fatalf("data read back is not correct. Got '%s'", string(dst.Bytes()))
 	}
 }

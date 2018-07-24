@@ -14,7 +14,7 @@ import (
 var testDir string
 
 func provider() filestor.Provider {
-	p, err := New("/Users/arash/coding/gocode/src/pijun.io/oscar/gcp-credentials.json")
+	p, err := New("/home/arash/coding/pijun_env/gcp-credentials.json", "dev-api-pijun-io")
 	if err != nil {
 		panic(err)
 	}
@@ -29,11 +29,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestProviderCreation(t *testing.T) {
-	_, err := New("")
+	_, err := New("", "")
 	if err == nil {
 		t.Fatalf("Should be error when no credentials are provided. Got %v", err)
 	}
-	p, err := New("/Users/arash/coding/gocode/src/pijun.io/oscar/gcp-credentials.json")
+	_, err = New("/home/arash/coding/pijun_env/gcp-credentials.json", "")
+	if err == nil {
+		t.Fatalf("Should be error when no bucket name is provided. Got %v", err)
+	}
+
+	p, err := New("/home/arash/coding/pijun_env/gcp-credentials.json", "dev-api-pijun-io")
 	if err != nil {
 		t.Fatal(err)
 	}

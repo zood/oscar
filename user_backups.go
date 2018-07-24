@@ -5,10 +5,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
+
+	"pijun.io/oscar/filestor"
 )
 
-const userDBsBucketName = "db_backups"
+// const userDBsBucketName = "db_backups"
+const dbBackupsDir = "db_backups"
 
 func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
@@ -16,28 +20,16 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("download_backup: %s", rs.Username(userID))
 	}
 
-	bkt, err := fs.Bucket(userDBsBucketName)
+	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
+	err := fs.ReadFile(relPath, w)
 	if err != nil {
+		if err == filestor.ErrFileNotExist {
+			sendNotFound(w, "no backup found", errorBackupNotFound)
+			return
+		}
+		// this might not be the best response, but let's try it out
 		sendInternalErr(w, err)
 		return
-	}
-	name := strconv.FormatInt(userID, 10) + ".db"
-	exists, err := bkt.ObjectExists(name)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-	if !exists {
-		sendNotFound(w, "no backup found", errorBackupNotFound)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	err = bkt.ReadObject(name, w)
-	if err != nil {
-		// we don't send anything else, because the stream is probably already corrupted
-		// by the ReadObject call
-		logErr(err)
 	}
 }
 
@@ -53,19 +45,12 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bkt, err := fs.Bucket(userDBsBucketName)
-	if err != nil {
-		sendInternalErr(w, err)
-		return
-	}
-
+	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
 	rdr := bytes.NewReader(buf)
-	name := strconv.FormatInt(userID, 10) + ".db"
-	err = bkt.WriteObject(name, rdr)
+	err = fs.WriteFile(relPath, rdr)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
-
 	sendSuccess(w, nil)
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"pijun.io/oscar/boltdb"
+	"pijun.io/oscar/gcs"
 	"pijun.io/oscar/localdisk"
 	"pijun.io/oscar/mariadb"
 
@@ -14,25 +15,29 @@ import (
 )
 
 type configuration struct {
-	SymmetricKey   string `json:"symmetric_key"`
 	AsymmetricKeys struct {
 		Public string `json:"public"`
 		Secret string `json:"secret"`
 	} `json:"asymmetric_keys"`
-	SQLDSN               string `json:"sql_dsn"`
-	Port                 *int   `json:"port,omitempty"`
-	KVDBPath             string `json:"kv_db_path"`
-	LocalDiskStoragePath string `json:"local_disk_storage_path"`
-	FCMServerKey         string `json:"fcm_server_key"`
-	Hostname             string `json:"hostname"`
-	TLS                  *bool  `json:"tls,omitempty"`
-	GCPCredentialsPath   string `json:"gcp_credentials_path"`
-	Email                struct {
+	Email struct {
 		SMTPUser     string `json:"smtp_user"`
 		SMTPPassword string `json:"smtp_password"`
 		SMTPServer   string `json:"smtp_server"`
 		SMTPPort     int    `json:"smtp_port"`
-	}
+	} `json:"email"`
+	FileStorage struct {
+		Type                 string `json:"type"`
+		GCPBucketName        string `json:"gcp_bucket_name"`
+		GCPCredentialsPath   string `json:"gcp_credentials_path"`
+		LocalDiskStoragePath string `json:"local_disk_storage_path"`
+	} `json:"file_storage"`
+	FCMServerKey string `json:"fcm_server_key"`
+	Hostname     string `json:"hostname"`
+	KVDBPath     string `json:"kv_db_path"`
+	Port         *int   `json:"port,omitempty"`
+	SQLDSN       string `json:"sql_dsn"`
+	SymmetricKey string `json:"symmetric_key"`
+	TLS          *bool  `json:"tls,omitempty"`
 }
 
 func applyConfigFile(confPath string) (*configuration, error) {
@@ -90,20 +95,20 @@ func applyConfigFile(confPath string) (*configuration, error) {
 		return nil, errors.Wrap(err, "kv db init failed")
 	}
 
-	// file storage
-	fs, err = localdisk.New(conf.LocalDiskStoragePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to init localdisk storage")
-	}
-
-	// create all the buckets we need
-	bkt, err := fs.Bucket(userDBsBucketName)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve bucket for user db backups")
-	}
-	err = bkt.Create()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create bucket for user dbs backup")
+	// set up our file storage
+	switch conf.FileStorage.Type {
+	case "localdisk":
+		fs, err = localdisk.New(conf.FileStorage.LocalDiskStoragePath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to init localdisk storage")
+		}
+	case "gcs":
+		fs, err = gcs.New(conf.FileStorage.GCPCredentialsPath, conf.FileStorage.GCPBucketName)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to init google cloud storage")
+		}
+	default:
+		return nil, errors.Errorf("unknown 'file_storage' type: %s", conf.FileStorage.Type)
 	}
 
 	// TLS info
@@ -121,15 +126,6 @@ func applyConfigFile(confPath string) (*configuration, error) {
 		if conf.Hostname == "" {
 			return nil, errors.New("Hostname is required when TLS is enabled")
 		}
-	}
-
-	if conf.GCPCredentialsPath == "" {
-		return nil, errors.New("must supply the 'gcp_credentials_path'")
-	}
-	// make sure the file exists
-	_, err = os.Stat(conf.GCPCredentialsPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to stat gcp credentials")
 	}
 
 	// SMTP client info

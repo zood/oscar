@@ -2,9 +2,9 @@ package localdisk
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 	"pijun.io/oscar/filestor"
@@ -16,7 +16,7 @@ type localDiskProvider struct {
 }
 
 // New returns a filestor.Provider backed by the system's local disk
-func New(rootDir string) (filestor.Provider3, error) {
+func New(rootDir string) (filestor.Provider, error) {
 	if rootDir == "" {
 		return nil, errors.New("You need to provide a valid path to localdisk")
 	}
@@ -35,11 +35,36 @@ func New(rootDir string) (filestor.Provider3, error) {
 	return localDiskProvider{rootDir: rootDir}, nil
 }
 
-func (ldp localDiskProvider) Bucket(name string) (filestor.Bucket, error) {
-	if strings.ContainsRune(name, os.PathSeparator) {
-		return nil, filestor.ErrInvalidName
+func (ldp localDiskProvider) ReadFile(relPath string, dst io.Writer) error {
+	fp := filepath.Join(ldp.rootDir, relPath)
+	f, err := os.Open(fp)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return filestor.ErrFileNotExist
+		}
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(dst, f)
+	return err
+}
+
+func (ldp localDiskProvider) WriteFile(relPath string, src io.Reader) error {
+	fp := filepath.Join(ldp.rootDir, relPath)
+	// make sure all the directories in the path exist
+	dir := filepath.Dir(fp)
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return err
 	}
 
-	bucketPath := filepath.Join(ldp.rootDir, name)
-	return localDiskBucket{dir: bucketPath}, nil
+	f, err := os.Create(fp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, src)
+	return err
 }
