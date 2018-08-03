@@ -15,6 +15,12 @@ import (
 )
 
 type configuration struct {
+	APNS struct {
+		KeyID      string `json:"key_id"`
+		P8Path     string `json:"p8_path"`
+		Production bool   `json:"production"`
+		TeamID     string `json:"team_id"`
+	} `json:"apns"`
 	AsymmetricKeys struct {
 		Public string `json:"public"`
 		Secret string `json:"secret"`
@@ -82,6 +88,21 @@ func applyConfigFile(confPath string) (*configuration, error) {
 		return nil, errors.New("fcm_server_key is empty/missing")
 	}
 	gFCMServerKey = conf.FCMServerKey
+
+	// Apple push notifications
+	if conf.APNS.KeyID == "" {
+		return nil, errors.New("apns 'key_id' is empty/missing")
+	}
+	if conf.APNS.P8Path == "" {
+		return nil, errors.New("apns 'p8_path' is empty/missing")
+	}
+	if conf.APNS.TeamID == "" {
+		return nil, errors.New("apns 'team_id' is empty/missing")
+	}
+	err = createAPNSClient(conf.APNS.P8Path, conf.APNS.KeyID, conf.APNS.TeamID, conf.APNS.Production)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to set up apple push notification service client")
+	}
 
 	// sql database
 	rs, err = mariadb.New(conf.SQLDSN)

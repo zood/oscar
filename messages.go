@@ -234,9 +234,16 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 		return
 	}
 
+	// NOTE:
+	// We should only push messages to iOS if it's urgent, because APNs
+	// will throttle us instead of holding on to messages like FCM.
+
 	// if the payload is small, send the entire thing
 	if len(buf) <= 3584 {
 		sendFirebaseMessage(userID, msgMap, urgent)
+		if urgent {
+			sendAPNSMessage(userID, msgMap, urgent)
+		}
 		return
 	}
 
@@ -245,8 +252,13 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 		logErr(errors.New("unable to send sync message via FCM for transient message"))
 		return
 	}
-	sendFirebaseMessage(userID, struct {
+
+	syncPayload := struct {
 		Type      string `json:"type"`
 		MessageID string `json:"message_id"`
-	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}, urgent)
+	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}
+	sendFirebaseMessage(userID, syncPayload, urgent)
+	if urgent {
+		sendAPNSMessage(userID, syncPayload, urgent)
+	}
 }

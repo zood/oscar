@@ -6,7 +6,41 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/sideshow/apns2"
+	"github.com/sideshow/apns2/token"
 )
+
+var gAPNSP8Path string
+
+var apnsClient *apns2.Client
+
+type apsPayload struct {
+	APS struct {
+		ContentAvailable int `json:"content-available"`
+	} `json:"aps"`
+	Data interface{} `json:"data"`
+}
+
+func createAPNSClient(p8Path, keyID, teamID string, production bool) error {
+	key, err := token.AuthKeyFromFile(p8Path)
+	if err != nil {
+		return err
+	}
+	token := &token.Token{
+		AuthKey: key,
+		KeyID:   keyID,
+		TeamID:  teamID,
+	}
+
+	apnsClient = apns2.NewTokenClient(token)
+	if production {
+		apnsClient.Production()
+	} else {
+		apnsClient.Development()
+	}
+
+	return nil
+}
 
 func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
@@ -73,6 +107,9 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
+	if shouldLogDebug() {
+		log.Printf("sendAPNSMessage => %s", rs.Username(userID))
+	}
 	tokens, err := rs.APNSTokensRaw(userID)
 	if err != nil {
 		logErr(err)
@@ -81,5 +118,33 @@ func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
 
 	if len(tokens) == 0 {
 		log.Printf("  no APNS tokens for %d", userID)
+		return
 	}
+	var priority int
+	if urgent {
+		priority = 10
+	} else {
+		priority = 5
+	}
+	n := &apns2.Notification{
+		Topic:    "io.pijun.michael",
+		Priority: priority,
+	}
+	ap := apsPayload{}
+	ap.APS.ContentAvailable = 1
+	ap.Data = payload
+	n.Payload = ap
+
+	for _, t := range tokens {
+		n.DeviceToken = t
+		resp, err := apnsClient.Push(n)
+		if err != nil {
+			log.Printf("Error pushing to user %d with token %s: %v", userID, t, err)
+			continue
+		}
+		if !resp.Sent() {
+			log.Printf("Push to user %d failed because '%s'", userID, resp.Reason)
+		}
+	}
+
 }

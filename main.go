@@ -125,13 +125,11 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/email-verifications/{token}", logHandler(disavowEmailHandler)).Methods("DELETE")
 
 	r.Handle("/goroutine-stacks", logHandler(goroutineStacksHandler)).Methods("GET")
-	r.Handle("/test", logHandler(testHandler)).Methods("GET")
+	// r.Handle("/test", logHandler(testHandler)).Methods("GET")
 	r.Handle("/logs", logHandler(recordLogMessageHandler)).Methods(http.MethodGet)
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	// pushMessageToUser(22, 16)
-	// sendFirebaseMessage(16, nil, false)
 }
 
 type tlsHandshakeFilter struct{}
