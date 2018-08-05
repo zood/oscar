@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -69,6 +70,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	pubID, sErr := createUser(user)
 	if sErr != nil {
+		log.Printf("createUser had an error: %v", sErr)
 		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
 		} else {
@@ -77,15 +79,20 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("createUser - sending success")
 	sendSuccess(w, struct {
 		ID encodableBytes `json:"id"`
 	}{ID: pubID})
+	log.Printf("createUser - success sent")
 }
 
 func createUser(user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
+	}
+	if len(user.Username) > 32 {
+		return nil, &serverError{code: errorInvalidUsername, message: "Username must be less than 33 characters."}
 	}
 	if !validUsernamePattern.MatchString(user.Username) {
 		return nil, &serverError{code: errorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain letters (a-z) or numbers (0-9)."}
