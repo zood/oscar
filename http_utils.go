@@ -25,6 +25,7 @@ func logHandler(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}()
 
+		log.Printf("about to ServeHTTP POST %s", r.URL.Path)
 		next.ServeHTTP(w, r)
 	}
 }
