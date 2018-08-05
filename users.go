@@ -61,6 +61,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // createUserHandler handles POST /users
 func createUserHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("createUserHandler")
 	user := User{}
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
@@ -68,6 +69,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("calling createUser...")
 	pubID, sErr := createUser(user)
 	if sErr != nil {
 		log.Printf("createUser had an error: %v", sErr)
