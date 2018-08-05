@@ -202,7 +202,7 @@ func createUser(user User) ([]byte, *serverError) {
 			logErr(err)
 			return nil, newInternalErr()
 		}
-		if val < 1 {
+		if val > 0 {
 			// someone already has this public id, let's try again
 			continue
 		}
