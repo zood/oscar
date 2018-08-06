@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
 )
@@ -117,7 +118,6 @@ func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
 	}
 
 	if len(tokens) == 0 {
-		log.Printf("  no APNS tokens for %d", userID)
 		return
 	}
 	var priority int
@@ -143,7 +143,16 @@ func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
 			continue
 		}
 		if !resp.Sent() {
-			log.Printf("Push to user %d failed because '%s'", userID, resp.Reason)
+			if resp.Reason == apns2.ReasonUnregistered {
+				// remove the token
+				err = rs.DeleteAPNSToken(t)
+				if err != nil {
+					logErr(err)
+				}
+			} else {
+				err = errors.Errorf("Push to user %d failed because '%s'", userID, resp.Reason)
+				logErr(err)
+			}
 		}
 	}
 
