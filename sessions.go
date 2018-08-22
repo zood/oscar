@@ -121,6 +121,64 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func verifyAccessToken(token string) (int64, error) {
+	if token == "" {
+		return 0, nil
+	}
+
+	// base64 => decrypt token => get user's public key => decrypt inner token => make sure creation dates match
+	encryptedTokenBytes, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return 0, nil
+	}
+	if len(encryptedTokenBytes) < secretBoxNonceSize+10 {
+		return 0, nil
+	}
+	tokenNonce := encryptedTokenBytes[:secretBoxNonceSize]
+	tokenCipherText := encryptedTokenBytes[secretBoxNonceSize:]
+	decryptedToken, ok := symmetricKeyDecrypt(tokenCipherText, tokenNonce, oscarSymKey)
+	if !ok {
+		return 0, nil
+	}
+
+	st := sessionToken{}
+	err = json.Unmarshal(decryptedToken, &st)
+	if err != nil {
+		return 0, nil
+	}
+
+	// sanity check on decoded JSON
+	if st.CreationDate == 0 || len(st.EncryptedCreationDate) < secretBoxNonceSize+10 || st.Name == "" {
+		return 0, nil
+	}
+
+	// get the user's public key
+	userID, pubKey, err := rs.LimitedUserInfo(st.Name)
+	if err != nil {
+		return 0, err
+	}
+	if pubKey == nil {
+		return 0, nil
+	}
+
+	cdNonce := st.EncryptedCreationDate[:secretBoxNonceSize]
+	cdCipherText := st.EncryptedCreationDate[secretBoxNonceSize:]
+	dcdCreationDateBytes, ok := publicKeyDecrypt(cdCipherText, cdNonce, pubKey, oscarKeyPair.secret)
+	if !ok {
+		return 0, nil
+	}
+	dcdCreationDate, err := bytesToInt64Err(dcdCreationDateBytes)
+	if err != nil {
+		return 0, nil
+	}
+	if dcdCreationDate != st.CreationDate {
+		log.Printf("server creation date differed from user encrypted creation date")
+		return 0, nil
+	}
+
+	return userID, nil
+}
+
 func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	username := vars["username"]

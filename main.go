@@ -121,6 +121,8 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/sessions/{username}/challenge", logHandler(createAuthChallengeHandler)).Methods("POST")
 	r.Handle("/sessions/{username}/challenge-response", logHandler(finishAuthChallengeHandler)).Methods("POST")
 
+	r.Handle("/sockets", logHandler(createSocketHandler)).Methods(http.MethodGet)
+
 	r.Handle("/email-verifications", logHandler(verifyEmailHandler)).Methods("POST")
 	r.Handle("/email-verifications/{token}", logHandler(disavowEmailHandler)).Methods("DELETE")
 
