@@ -1,8 +1,6 @@
 package main
 
 import (
-	"database/sql/driver"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -11,52 +9,53 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"zood.xyz/oscar/encodable"
 )
 
-// a type that can conforms to the json.Marshal and json.Unmarshal interfaces,
+// a type that conforms to the json.Marshal and json.Unmarshal interfaces,
 // which converts the bytes between []byte and base64
-type encodableBytes []byte
+// type encodableBytes []byte
 
-func (eb encodableBytes) MarshalJSON() ([]byte, error) {
-	dst := make([]byte, base64.StdEncoding.EncodedLen(len(eb)))
-	base64.StdEncoding.Encode(dst, eb)
-	final := append([]byte{'"'}, dst...)
-	final = append(final, '"')
-	return final, nil
-}
+// func (eb encodableBytes) MarshalJSON() ([]byte, error) {
+// 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(eb)))
+// 	base64.StdEncoding.Encode(dst, eb)
+// 	final := append([]byte{'"'}, dst...)
+// 	final = append(final, '"')
+// 	return final, nil
+// }
 
-func (eb *encodableBytes) UnmarshalJSON(data []byte) error {
-	if len(data) < 2 {
-		return errors.New("byte data must be encoded as a base64 string")
-	}
-	if data[0] != '"' || data[len(data)-1] != '"' {
-		return errors.New("base64 string must be surrounded by double quotes")
-	}
-	encodedData := data[1 : len(data)-1]
-	decodedData := make([]byte, base64.StdEncoding.DecodedLen(len(encodedData)))
-	l, err := base64.StdEncoding.Decode(decodedData, encodedData)
-	if err != nil {
-		return err
-	}
-	// with base64, you have to check the length that it ended up being decoded
-	// into, because the value from DecodedLen() is max, not the exact amount
-	*eb = decodedData[:l]
-	return nil
-}
+// func (eb *encodableBytes) UnmarshalJSON(data []byte) error {
+// 	if len(data) < 2 {
+// 		return errors.New("byte data must be encoded as a base64 string")
+// 	}
+// 	if data[0] != '"' || data[len(data)-1] != '"' {
+// 		return errors.New("base64 string must be surrounded by double quotes")
+// 	}
+// 	encodedData := data[1 : len(data)-1]
+// 	decodedData := make([]byte, base64.StdEncoding.DecodedLen(len(encodedData)))
+// 	l, err := base64.StdEncoding.Decode(decodedData, encodedData)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	// with base64, you have to check the length that it ended up being decoded
+// 	// into, because the value from DecodedLen() is max, not the exact amount
+// 	*eb = decodedData[:l]
+// 	return nil
+// }
 
-func (eb encodableBytes) Value() (driver.Value, error) {
-	return []byte(eb), nil
-}
+// func (eb encodableBytes) Value() (driver.Value, error) {
+// 	return []byte(eb), nil
+// }
 
 // Message ...
 type Message struct {
-	ID             int64          `json:"id"`
-	RecipientID    int64          `json:"-"`
-	SenderID       int64          `json:"-"`
-	PublicSenderID encodableBytes `json:"sender_id"`
-	CipherText     encodableBytes `json:"cipher_text"`
-	Nonce          encodableBytes `json:"nonce"`
-	SentDate       int64          `json:"sent_date"`
+	ID             int64           `json:"id"`
+	RecipientID    int64           `json:"-"`
+	SenderID       int64           `json:"-"`
+	PublicSenderID encodable.Bytes `json:"sender_id"`
+	CipherText     encodable.Bytes `json:"cipher_text"`
+	Nonce          encodable.Bytes `json:"nonce"`
+	SentDate       int64           `json:"sent_date"`
 }
 
 // sendMessageToUserHandler handles POST /users/{public_id}/messages
@@ -75,10 +74,10 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := struct {
-		CipherText encodableBytes `json:"cipher_text"`
-		Nonce      encodableBytes `json:"nonce"`
-		Urgent     bool           `json:"urgent"`
-		Transient  bool           `json:"transient"`
+		CipherText encodable.Bytes `json:"cipher_text"`
+		Nonce      encodable.Bytes `json:"nonce"`
+		Urgent     bool            `json:"urgent"`
+		Transient  bool            `json:"transient"`
 	}{}
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {

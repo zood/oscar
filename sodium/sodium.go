@@ -78,6 +78,9 @@ const PublicKeySize = C.crypto_box_PUBLICKEYBYTES
 // SecretKeySize is the size in bytes of a secret key in a KeyPair
 const SecretKeySize = C.crypto_box_SECRETKEYBYTES
 
+// PasswordStretchingSaltSize is the size in bytes of the salt required for stretching a password
+const PasswordStretchingSaltSize = C.crypto_pwhash_SALTBYTES
+
 const boxNonceSize = C.crypto_box_NONCEBYTES
 const boxMACSize = C.crypto_box_MACBYTES
 const secretBoxMACSize = C.crypto_secretbox_MACBYTES

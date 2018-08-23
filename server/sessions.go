@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/sodium"
 )
 
@@ -23,21 +24,21 @@ type sessionChallenge struct {
 }
 
 type encryptedData struct {
-	CipherText encodableBytes `json:"cipher_text"`
-	Nonce      encodableBytes `json:"nonce"`
+	CipherText encodable.Bytes `json:"cipher_text"`
+	Nonce      encodable.Bytes `json:"nonce"`
 }
 
 type sessionToken struct {
-	Name                  string         `json:"n"`
-	CreationDate          int64          `json:"cd"`
-	EncryptedCreationDate encodableBytes `json:"ecd"`
+	Name                  string          `json:"n"`
+	CreationDate          int64           `json:"cd"`
+	EncryptedCreationDate encodable.Bytes `json:"ecd"`
 }
 
 type loginResponse struct {
-	ID                       encodableBytes `json:"id"`
-	AccessToken              string         `json:"access_token"`
-	WrappedSymmetricKey      encodableBytes `json:"wrapped_symmetric_key"`
-	WrappedSymmetricKeyNonce encodableBytes `json:"wrapped_symmetric_key_nonce"`
+	ID                       encodable.Bytes `json:"id"`
+	AccessToken              string          `json:"access_token"`
+	WrappedSymmetricKey      encodable.Bytes `json:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce encodable.Bytes `json:"wrapped_symmetric_key_nonce"`
 }
 
 func userIDFromContext(ctx context.Context) int64 {
@@ -226,9 +227,9 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := struct {
-		User         User           `json:"user"`
-		Challenge    encodableBytes `json:"challenge"`
-		CreationDate encodableBytes `json:"creation_date"`
+		User         User            `json:"user"`
+		Challenge    encodable.Bytes `json:"challenge"`
+		CreationDate encodable.Bytes `json:"creation_date"`
 	}{User: user, Challenge: challenge, CreationDate: int64ToBytes(creationDate)}
 
 	sendSuccess(w, resp)

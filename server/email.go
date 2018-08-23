@@ -33,11 +33,6 @@ var emailConfiguration = struct {
 	smtpPort     int
 }{}
 
-// const gmailUser = `noreply@pijun.io`
-// const gmailPassword = `whatisagoodpasswordfor229nvbzzaaldfppqq`
-// const gmailSMTPServer = `smtp.gmail.com`
-// const gmailSMTPPort = 587
-
 func sendEmail(to, from, subject, body string) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", from)

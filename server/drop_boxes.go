@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/internal/pubsub"
 )
 
@@ -25,8 +26,8 @@ const (
 )
 
 type pkgEvent struct {
-	Pkg   encodableBytes `json:"package"`
-	BoxID encodableBytes `json:"box_id"`
+	Pkg   encodable.Bytes `json:"package"`
+	BoxID encodable.Bytes `json:"box_id"`
 }
 
 type subscriptionReader struct {

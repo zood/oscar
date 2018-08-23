@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"zood.xyz/oscar/base62"
+	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/relstor"
 	"zood.xyz/oscar/sodium"
 
@@ -22,19 +23,19 @@ const publicUserIDSize = 16
 
 // User ...
 type User struct {
-	ID                          int64          `json:"-" db:"id"`
-	PublicID                    encodableBytes `json:"id,omitempty"`
-	Username                    string         `json:"username,omitempty" db:"username"`
-	PasswordSalt                encodableBytes `json:"password_salt,omitempty" db:"password_salt"`
-	PasswordHashAlgorithm       string         `json:"password_hash_algorithm" db:"password_hash_algorithm"`
-	PasswordHashOperationsLimit uint           `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
-	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty" db:"password_hash_memory_limit"`
-	PublicKey                   encodableBytes `json:"public_key,omitempty" db:"public_key"`
-	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key,omitempty" db:"wrapped_secret_key"`
-	WrappedSecretKeyNonce       encodableBytes `json:"wrapped_secret_key_nonce,omitempty" db:"wrapped_secret_key_nonce"`
-	WrappedSymmetricKey         encodableBytes `json:"wrapped_symmetric_key,omitempty" db:"wrapped_symmetric_key"`
-	WrappedSymmetricKeyNonce    encodableBytes `json:"wrapped_symmetric_key_nonce,omitempty" db:"wrapped_symmetric_key_nonce"`
-	Email                       string         `json:"email" db:"email"`
+	ID                          int64           `json:"-" db:"id"`
+	PublicID                    encodable.Bytes `json:"id,omitempty"`
+	Username                    string          `json:"username,omitempty" db:"username"`
+	PasswordSalt                encodable.Bytes `json:"password_salt,omitempty" db:"password_salt"`
+	PasswordHashAlgorithm       string          `json:"password_hash_algorithm" db:"password_hash_algorithm"`
+	PasswordHashOperationsLimit uint            `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
+	PasswordHashMemoryLimit     uint64          `json:"password_hash_memory_limit,omitempty" db:"password_hash_memory_limit"`
+	PublicKey                   encodable.Bytes `json:"public_key,omitempty" db:"public_key"`
+	WrappedSecretKey            encodable.Bytes `json:"wrapped_secret_key,omitempty" db:"wrapped_secret_key"`
+	WrappedSecretKeyNonce       encodable.Bytes `json:"wrapped_secret_key_nonce,omitempty" db:"wrapped_secret_key_nonce"`
+	WrappedSymmetricKey         encodable.Bytes `json:"wrapped_symmetric_key,omitempty" db:"wrapped_symmetric_key"`
+	WrappedSymmetricKeyNonce    encodable.Bytes `json:"wrapped_symmetric_key_nonce,omitempty" db:"wrapped_symmetric_key_nonce"`
+	Email                       string          `json:"email" db:"email"`
 }
 
 func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -80,7 +81,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(w, struct {
-		ID encodableBytes `json:"id"`
+		ID encodable.Bytes `json:"id"`
 	}{ID: pubID})
 }
 
@@ -243,7 +244,7 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := struct {
-		PublicKey encodableBytes `json:"public_key"`
+		PublicKey encodable.Bytes `json:"public_key"`
 	}{PublicKey: pubKey}
 
 	sendSuccess(w, resp)

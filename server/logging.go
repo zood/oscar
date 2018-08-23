@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+
+	"zood.xyz/oscar/encodable"
 )
 
 // currLogLevel holds the current log detail desired
@@ -78,9 +80,9 @@ func setLogLevelHandler(w http.ResponseWriter, r *http.Request) {
 
 func recordLogMessageHandler(w http.ResponseWriter, r *http.Request) {
 	postBody := struct {
-		UserID    encodableBytes `json:"user_id"`
-		Timestamp int64          `json:"timestamp"`
-		Message   string         `json:"message"`
+		UserID    encodable.Bytes `json:"user_id"`
+		Timestamp int64           `json:"timestamp"`
+		Message   string          `json:"message"`
 	}{}
 
 	err := json.NewDecoder(r.Body).Decode(&postBody)
