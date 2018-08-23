@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"pijun.io/oscar/sodium"
+	"zood.xyz/oscar/sodium"
 )
 
 var oscarKeyPair sodium.KeyPair

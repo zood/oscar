@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
-	"pijun.io/oscar/relstor"
+	"zood.xyz/oscar/relstor"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"pijun.io/oscar/filestor"
+	"zood.xyz/oscar/filestor"
 )
 
 // localDiskProvider satisifies the filestor.Provider interface

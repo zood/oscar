@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"pijun.io/oscar/boltdb"
-	"pijun.io/oscar/gcs"
-	"pijun.io/oscar/localdisk"
-	"pijun.io/oscar/mariadb"
-	"pijun.io/oscar/sodium"
+	"zood.xyz/oscar/boltdb"
+	"zood.xyz/oscar/gcs"
+	"zood.xyz/oscar/localdisk"
+	"zood.xyz/oscar/mariadb"
+	"zood.xyz/oscar/sodium"
 
 	"github.com/pkg/errors"
 )

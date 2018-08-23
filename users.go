@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"pijun.io/oscar/base62"
-	"pijun.io/oscar/relstor"
-	"pijun.io/oscar/sodium"
+	"zood.xyz/oscar/base62"
+	"zood.xyz/oscar/relstor"
+	"zood.xyz/oscar/sodium"
 
 	"github.com/gorilla/mux"
 )

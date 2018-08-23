@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"time"
 
-	"pijun.io/oscar/filestor"
-	"pijun.io/oscar/kvstor"
+	"zood.xyz/oscar/filestor"
+	"zood.xyz/oscar/kvstor"
 
 	"golang.org/x/crypto/acme/autocert"
-	"pijun.io/oscar/relstor"
+	"zood.xyz/oscar/relstor"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"

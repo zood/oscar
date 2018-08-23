@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"pijun.io/oscar/filestor"
+	"zood.xyz/oscar/filestor"
 )
 
 var testDir string

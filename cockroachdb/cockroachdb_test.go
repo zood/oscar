@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	_ "github.com/lib/pq"
-	"pijun.io/oscar/relstor"
+	"zood.xyz/oscar/relstor"
 )
 
 var cdb *cockroachDBProvider

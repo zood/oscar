@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"pijun.io/oscar/relstor"
+	"zood.xyz/oscar/relstor"
 
 	_ "github.com/go-sql-driver/mysql"
 )

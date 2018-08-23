@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"pijun.io/oscar/kvstor"
+	"zood.xyz/oscar/kvstor"
 )
 
 var bdb kvstor.Provider

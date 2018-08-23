@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"pijun.io/oscar/internal/pubsub"
+	"zood.xyz/oscar/internal/pubsub"
 )
 
 const dropBoxIDSize = 16

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"pijun.io/oscar/sodium"
+	"zood.xyz/oscar/sodium"
 )
 
 type sessionChallenge struct {

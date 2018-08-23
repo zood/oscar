@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/boltdb/bolt"
-	"pijun.io/oscar/kvstor"
+	"zood.xyz/oscar/kvstor"
 )
 
 var userIDsBucketName = []byte("user_ids")
