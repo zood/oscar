@@ -12,18 +12,18 @@ import (
 
 const welcomeEmailTemplate = `Hi,
 
-Thanks for signing up for Pijun.
+Thanks for signing up for Zood Location.
 
 To verify your email, click the link below:
-https://e.pijun.io/verify-email?t={{.Token}}
+https://e.zood.xyz/verify-email?t={{.Token}}
 
-I hope you enjoy using Pijun as much I enjoyed creating it.
+We hope you enjoy using Zood Location as much we enjoyed creating it.
 
 Best,
 Arash
 
-If you didn't sign up for Pijun, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. Click the link below to remove your email address from this account:
-https://e.pijun.io/disavow-email?t={{.Token}}
+If you didn't sign up for Zood Location, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. Click the link below to remove your email address from this account:
+https://e.zood.xyz/disavow-email?t={{.Token}}
 `
 
 var emailConfiguration = struct {
@@ -60,7 +60,7 @@ func sendVerificationEmail(token, email string) error {
 	}
 	buf := &bytes.Buffer{}
 	tmpl.Execute(buf, struct{ Token string }{Token: token})
-	return sendEmail(email, "Pijun <noreply@pijun.io>", "Pijun: Email Verification", buf.String())
+	return sendEmail(email, "Zood Location <noreply@pijun.io>", "Zood: Email Verification", buf.String())
 }
 
 // verifyEmailHandler handles POST /email-verifications
