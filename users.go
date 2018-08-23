@@ -9,7 +9,9 @@ import (
 	"regexp"
 	"strings"
 
+	"pijun.io/oscar/base62"
 	"pijun.io/oscar/relstor"
+	"pijun.io/oscar/sodium"
 
 	"github.com/gorilla/mux"
 )
@@ -25,7 +27,7 @@ type User struct {
 	Username                    string         `json:"username,omitempty" db:"username"`
 	PasswordSalt                encodableBytes `json:"password_salt,omitempty" db:"password_salt"`
 	PasswordHashAlgorithm       string         `json:"password_hash_algorithm" db:"password_hash_algorithm"`
-	PasswordHashOperationsLimit uint64         `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
+	PasswordHashOperationsLimit uint           `json:"password_hash_operations_limit,omitempty" db:"password_hash_operations_limit"`
 	PasswordHashMemoryLimit     uint64         `json:"password_hash_memory_limit,omitempty" db:"password_hash_memory_limit"`
 	PublicKey                   encodableBytes `json:"public_key,omitempty" db:"public_key"`
 	WrappedSecretKey            encodableBytes `json:"wrapped_secret_key,omitempty" db:"wrapped_secret_key"`
@@ -96,19 +98,25 @@ func createUser(user User) ([]byte, *serverError) {
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: errorInvalidPasswordSalt, message: "Invalid password salt"}
 	}
-	if user.PasswordHashAlgorithm != hashAlgArgon2i13 && user.PasswordHashAlgorithm != hashAlgArgon2id13 {
+	var alg sodium.Algorithm
+	switch user.PasswordHashAlgorithm {
+	case sodium.Argon2i13.Name:
+		alg = sodium.Argon2i13
+	case sodium.Argon2id13.Name:
+		alg = sodium.Argon2id13
+	default:
 		return nil, &serverError{code: errorInvalidPasswordHashAlgorithm, message: "Invalid password hash algorithm"}
 	}
-	if user.PasswordHashOperationsLimit < argon2iOpsLimitInteractive {
+	if user.PasswordHashOperationsLimit < alg.OpsLimitInteractive {
 		return nil, &serverError{code: errorArgon2iOpsLimitTooLow, message: "Password hash ops limit is too low"}
 	}
-	if user.PasswordHashMemoryLimit < argon2iMemLimitInteractive {
+	if user.PasswordHashMemoryLimit < alg.MemLimitInteractive {
 		return nil, &serverError{code: errorArgon2iMemLimitTooLow, message: "Password hash mem limit is too low"}
 	}
-	if user.PublicKey == nil || len(user.PublicKey) != publicKeySize {
+	if user.PublicKey == nil || len(user.PublicKey) != sodium.PublicKeySize {
 		return nil, &serverError{
 			code:    errorInvalidPublicKey,
-			message: fmt.Sprintf("Invalid public key. Expected %d bytes. Found %d.", publicKeySize, len(user.PublicKey)),
+			message: fmt.Sprintf("Invalid public key. Expected %d bytes. Found %d.", sodium.PublicKeySize, len(user.PublicKey)),
 		}
 	}
 	if user.WrappedSecretKey == nil || len(user.WrappedSecretKey) == 0 {
@@ -146,7 +154,7 @@ func createUser(user User) ([]byte, *serverError) {
 		}
 
 		// everything looks good, so let's generate a verification token
-		token := randBase62(16)
+		token := base62.Rand(16) // randBase62(16)
 		emailVerificationToken = &token
 	}
 

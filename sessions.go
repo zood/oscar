@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"pijun.io/oscar/sodium"
 )
 
 type sessionChallenge struct {
@@ -61,13 +62,13 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 			sendInvalidAccessToken(w)
 			return
 		}
-		if len(encryptedTokenBytes) < secretBoxNonceSize+10 {
+		if len(encryptedTokenBytes) < sodium.SymmetricNonceSize+10 {
 			sendInvalidAccessToken(w)
 			return
 		}
-		tokenNonce := encryptedTokenBytes[:secretBoxNonceSize]
-		tokenCipherText := encryptedTokenBytes[secretBoxNonceSize:]
-		decryptedToken, ok := symmetricKeyDecrypt(tokenCipherText, tokenNonce, oscarSymKey)
+		tokenNonce := encryptedTokenBytes[:sodium.SymmetricNonceSize]
+		tokenCipherText := encryptedTokenBytes[sodium.SymmetricNonceSize:]
+		decryptedToken, ok := sodium.SymmetricKeyDecrypt(tokenCipherText, tokenNonce, oscarSymKey)
 		if !ok {
 			sendInvalidAccessToken(w)
 			return
@@ -81,7 +82,7 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// sanity check on decoded JSON
-		if st.CreationDate == 0 || len(st.EncryptedCreationDate) < secretBoxNonceSize+10 || st.Name == "" {
+		if st.CreationDate == 0 || len(st.EncryptedCreationDate) < sodium.SymmetricNonceSize+10 || st.Name == "" {
 			sendInvalidAccessToken(w)
 			return
 		}
@@ -97,9 +98,9 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		cdNonce := st.EncryptedCreationDate[:secretBoxNonceSize]
-		cdCipherText := st.EncryptedCreationDate[secretBoxNonceSize:]
-		dcdCreationDateBytes, ok := publicKeyDecrypt(cdCipherText, cdNonce, pubKey, oscarKeyPair.secret)
+		cdNonce := st.EncryptedCreationDate[:sodium.SymmetricNonceSize]
+		cdCipherText := st.EncryptedCreationDate[sodium.SymmetricNonceSize:]
+		dcdCreationDateBytes, ok := sodium.PublicKeyDecrypt(cdCipherText, cdNonce, pubKey, oscarKeyPair.Secret)
 		if !ok {
 			sendInvalidAccessToken(w)
 			return
@@ -131,12 +132,12 @@ func verifyAccessToken(token string) (int64, error) {
 	if err != nil {
 		return 0, nil
 	}
-	if len(encryptedTokenBytes) < secretBoxNonceSize+10 {
+	if len(encryptedTokenBytes) < sodium.SymmetricNonceSize+10 {
 		return 0, nil
 	}
-	tokenNonce := encryptedTokenBytes[:secretBoxNonceSize]
-	tokenCipherText := encryptedTokenBytes[secretBoxNonceSize:]
-	decryptedToken, ok := symmetricKeyDecrypt(tokenCipherText, tokenNonce, oscarSymKey)
+	tokenNonce := encryptedTokenBytes[:sodium.SymmetricNonceSize]
+	tokenCipherText := encryptedTokenBytes[sodium.SymmetricNonceSize:]
+	decryptedToken, ok := sodium.SymmetricKeyDecrypt(tokenCipherText, tokenNonce, oscarSymKey)
 	if !ok {
 		return 0, nil
 	}
@@ -148,7 +149,7 @@ func verifyAccessToken(token string) (int64, error) {
 	}
 
 	// sanity check on decoded JSON
-	if st.CreationDate == 0 || len(st.EncryptedCreationDate) < secretBoxNonceSize+10 || st.Name == "" {
+	if st.CreationDate == 0 || len(st.EncryptedCreationDate) < sodium.SymmetricNonceSize+10 || st.Name == "" {
 		return 0, nil
 	}
 
@@ -161,9 +162,9 @@ func verifyAccessToken(token string) (int64, error) {
 		return 0, nil
 	}
 
-	cdNonce := st.EncryptedCreationDate[:secretBoxNonceSize]
-	cdCipherText := st.EncryptedCreationDate[secretBoxNonceSize:]
-	dcdCreationDateBytes, ok := publicKeyDecrypt(cdCipherText, cdNonce, pubKey, oscarKeyPair.secret)
+	cdNonce := st.EncryptedCreationDate[:sodium.SymmetricNonceSize]
+	cdCipherText := st.EncryptedCreationDate[sodium.SymmetricNonceSize:]
+	dcdCreationDateBytes, ok := sodium.PublicKeyDecrypt(cdCipherText, cdNonce, pubKey, oscarKeyPair.Secret)
 	if !ok {
 		return 0, nil
 	}
@@ -276,7 +277,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decryptedChallenge, ok := publicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, user.PublicKey, oscarKeyPair.secret)
+	decryptedChallenge, ok := sodium.PublicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, user.PublicKey, oscarKeyPair.Secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -292,7 +293,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decryptedCreationDate, ok := publicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, user.PublicKey, oscarKeyPair.secret)
+	decryptedCreationDate, ok := sodium.PublicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, user.PublicKey, oscarKeyPair.Secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -317,7 +318,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenCT, tokenNonce, err := symmetricKeyEncrypt(tokenBytes, oscarSymKey)
+	tokenCT, tokenNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, oscarSymKey)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

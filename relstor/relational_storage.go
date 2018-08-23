@@ -51,7 +51,7 @@ type UserRecord struct {
 	WrappedSymmetricKeyNonce    []byte  `db:"wrapped_symmetric_key_nonce"`
 	PasswordSalt                []byte  `db:"password_salt"`
 	PasswordHashAlgorithm       string  `db:"password_hash_algorithm"`
-	PasswordHashOperationsLimit uint64  `db:"password_hash_operations_limit"`
+	PasswordHashOperationsLimit uint    `db:"password_hash_operations_limit"`
 	PasswordHashMemoryLimit     uint64  `db:"password_hash_memory_limit"`
 	Email                       *string `db:"email"`
 }

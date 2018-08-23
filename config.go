@@ -10,6 +10,7 @@ import (
 	"pijun.io/oscar/gcs"
 	"pijun.io/oscar/localdisk"
 	"pijun.io/oscar/mariadb"
+	"pijun.io/oscar/sodium"
 
 	"github.com/pkg/errors"
 )
@@ -63,24 +64,24 @@ func applyConfigFile(confPath string) (*configuration, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "sym key decode failed")
 	}
-	if len(oscarSymKey) != secretBoxKeySize {
-		return nil, fmt.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), secretBoxKeySize)
+	if len(oscarSymKey) != sodium.SymmetricKeySize {
+		return nil, fmt.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), sodium.SymmetricKeySize)
 	}
 
 	// public/private keys
-	oscarKeyPair.public, err = hex.DecodeString(conf.AsymmetricKeys.Public)
+	oscarKeyPair.Public, err = hex.DecodeString(conf.AsymmetricKeys.Public)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym public key decode failed")
 	}
-	oscarKeyPair.secret, err = hex.DecodeString(conf.AsymmetricKeys.Secret)
+	oscarKeyPair.Secret, err = hex.DecodeString(conf.AsymmetricKeys.Secret)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym secret key decode failed")
 	}
-	if len(oscarKeyPair.public) != publicKeySize {
-		return nil, fmt.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.public), publicKeySize)
+	if len(oscarKeyPair.Public) != sodium.PublicKeySize {
+		return nil, fmt.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.Public), sodium.PublicKeySize)
 	}
-	if len(oscarKeyPair.secret) != secretKeySize {
-		return nil, fmt.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.secret), secretKeySize)
+	if len(oscarKeyPair.Secret) != sodium.SecretKeySize {
+		return nil, fmt.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.Secret), sodium.SecretKeySize)
 	}
 
 	// Firebase cloud messaging

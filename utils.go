@@ -2,35 +2,8 @@ package main
 
 import (
 	"bytes"
-	crand "crypto/rand"
 	"encoding/binary"
-	"math/big"
-	"strings"
 )
-
-var base62Chars = strings.Split("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "")
-
-func randBase62(length int) string {
-	s := ""
-	numRunes := uint64(len(base62Chars))
-	for i := 0; i < length; i++ {
-		idx := crandUint64n(numRunes)
-		s += base62Chars[idx]
-	}
-
-	return s
-}
-
-func crandUint64n(n uint64) uint64 {
-	bigN := (&big.Int{}).SetUint64(n)
-	val, err := crand.Int(crand.Reader, bigN)
-	if err != nil {
-		logErr(err)
-		panic(err)
-	}
-
-	return val.Uint64()
-}
 
 func int64ToBytes(i int64) []byte {
 	buf := &bytes.Buffer{}

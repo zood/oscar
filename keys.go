@@ -1,12 +1,16 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
 
-var oscarKeyPair keyPair
+	"pijun.io/oscar/sodium"
+)
+
+var oscarKeyPair sodium.KeyPair
 var oscarSymKey []byte
 
 func getServerPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, struct {
 		Key encodableBytes `json:"public_key"`
-	}{Key: oscarKeyPair.public})
+	}{Key: oscarKeyPair.Public})
 }
