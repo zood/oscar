@@ -295,13 +295,3 @@ func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	sendSuccess(w, user)
 }
-
-// only useful for logging
-// func usernameFromID(userID int64) string {
-// 	var str sql.NullString
-// 	err := db().QueryRow("SELECT username FROM users WHERE id=?", userID).Scan(&str)
-// 	if err != nil {
-// 		return ""
-// 	}
-// 	return str.String
-// }
