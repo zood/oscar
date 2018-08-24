@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -102,7 +101,6 @@ func TestPackageWatching(t *testing.T) {
 			msgChan <- rcvdPkg
 			conn.Close()
 			close(msgChan)
-			log.Printf("closed the channel")
 			return
 		}
 	}()

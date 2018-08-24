@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"testing"
 
@@ -135,30 +136,6 @@ func newUser(t *testing.T) testUser {
 
 func TestCreateUser(t *testing.T) {
 	createUserOnServer(t)
-	// user := newUser(t)
-	// req, _ := http.NewRequest(http.MethodPost, apiRoot+"/alpha/users", user.userReader())
-	// resp, err := http.DefaultClient.Do(req)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// defer resp.Body.Close()
-
-	// if resp.StatusCode != http.StatusOK {
-	// 	t.Fatalf("Incorrect status code: %d", resp.StatusCode)
-	// }
-
-	// respBody := struct {
-	// 	ID       encodable.Bytes `json:"id"`
-	// 	Username string          `json:"username"`
-	// }{}
-
-	// if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
-	// 	t.Fatal(err)
-	// }
-
-	// if len(respBody.ID) != 16 {
-	// 	t.Fatalf("user id length is wrong - found %d", len(respBody.ID))
-	// }
 }
 
 func TestSearchUsersHandler(t *testing.T) {
@@ -204,5 +181,55 @@ func TestSearchUsersHandler(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Status should have been 'not found'. Got %d", resp.StatusCode)
+	}
+}
+
+func TestUserDataBackups(t *testing.T) {
+	user := createUserOnServer(t)
+	token := login(user, t)
+
+	// check for a database backup for this new user
+	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/alpha/users/me/backup", nil)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	// we should get a 404, because there is no backup yet
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	// now put some data there
+	data := []byte("This is a database backup. It's encrypted data.")
+	req, _ = http.NewRequest(http.MethodPut, apiRoot+"/alpha/users/me/backup", bytes.NewReader(data))
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	// now retrieve the backup
+	req, _ = http.NewRequest(http.MethodGet, apiRoot+"/alpha/users/me/backup", nil)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+	dledData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(dledData, data) {
+		t.Fatal("Backup data didn't match")
 	}
 }
