@@ -12,8 +12,6 @@ import (
 	"zood.xyz/oscar/sodium"
 )
 
-const apiRoot = "http://localhost:4046"
-
 type testUser struct {
 	publicID                      []byte
 	username                      string
