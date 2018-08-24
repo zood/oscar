@@ -60,6 +60,37 @@ func (tu testUser) userReader() io.Reader {
 	return bytes.NewReader(buf)
 }
 
+func createUserOnServer(t *testing.T) testUser {
+	user := newUser(t)
+	req, _ := http.NewRequest(http.MethodPost, apiRoot+"/alpha/users", user.userReader())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	respBody := struct {
+		ID       encodable.Bytes `json:"id"`
+		Username string          `json:"username"`
+	}{}
+
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(respBody.ID) != 16 {
+		t.Fatalf("user id length is wrong - found %d", len(respBody.ID))
+	}
+
+	user.publicID = respBody.ID
+
+	return user
+}
+
 func newUser(t *testing.T) testUser {
 	u := testUser{
 		username: base62.Rand(7),
@@ -104,8 +135,41 @@ func newUser(t *testing.T) testUser {
 	return u
 }
 
-func TestServerInfo(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/server-info", nil)
+func TestCreateUser(t *testing.T) {
+	createUserOnServer(t)
+	// user := newUser(t)
+	// req, _ := http.NewRequest(http.MethodPost, apiRoot+"/alpha/users", user.userReader())
+	// resp, err := http.DefaultClient.Do(req)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// defer resp.Body.Close()
+
+	// if resp.StatusCode != http.StatusOK {
+	// 	t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	// }
+
+	// respBody := struct {
+	// 	ID       encodable.Bytes `json:"id"`
+	// 	Username string          `json:"username"`
+	// }{}
+
+	// if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+	// 	t.Fatal(err)
+	// }
+
+	// if len(respBody.ID) != 16 {
+	// 	t.Fatalf("user id length is wrong - found %d", len(respBody.ID))
+	// }
+}
+
+func TestSearchUsersHandler(t *testing.T) {
+	user := createUserOnServer(t)
+	accessToken := login(user, t)
+
+	// search for ourself
+	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/alpha/users?username="+user.username, nil)
+	req.Header.Add("X-Oscar-Access-Token", accessToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -116,39 +180,31 @@ func TestServerInfo(t *testing.T) {
 		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
 	}
 
-	obj := struct {
-		BuildTime string `json:"build_time"`
-		SysKb     int    `json:"sys_kb"`
+	searchResp := struct {
+		ID        encodable.Bytes `json:"id"`
+		PublicKey encodable.Bytes `json:"public_key"`
 	}{}
-	err = json.NewDecoder(resp.Body).Decode(&obj)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 		t.Fatal(err)
 	}
-}
+	// make sure the id and key match
+	if !bytes.Equal(searchResp.ID, user.publicID) {
+		t.Fatal("id mismatch")
+	}
+	if !bytes.Equal(searchResp.PublicKey, user.keyPair.Public) {
+		t.Fatal("public key mismatch")
+	}
 
-func TestCreateUser(t *testing.T) {
-	user := newUser(t)
-	req, _ := http.NewRequest(http.MethodPost, apiRoot+"/alpha/users", user.userReader())
-	resp, err := http.DefaultClient.Do(req)
+	// search for a non-existent user
+	req, _ = http.NewRequest(http.MethodGet, apiRoot+"/alpha/users?username=gob", nil)
+	req.Header.Add("X-Oscar-Access-Token", accessToken)
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Incorrec status code: %d", resp.StatusCode)
-	}
-
-	respBody := struct {
-		ID       encodable.Bytes `json:"id"`
-		Username string          `json:"username"`
-	}{}
-
-	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
-		t.Fatal(err)
-	}
-
-	if len(respBody.ID) != 16 {
-		t.Fatalf("user id length is wrong - found %d", len(respBody.ID))
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Status should have been 'not found'. Got %d", resp.StatusCode)
 	}
 }
