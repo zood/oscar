@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -138,7 +139,7 @@ func TestCreateUser(t *testing.T) {
 	createUserOnServer(t)
 }
 
-func TestSearchUsersHandler(t *testing.T) {
+func TestSearchUsers(t *testing.T) {
 	user := createUserOnServer(t)
 	accessToken := login(user, t)
 
@@ -231,5 +232,40 @@ func TestUserDataBackups(t *testing.T) {
 	}
 	if !bytes.Equal(dledData, data) {
 		t.Fatal("Backup data didn't match")
+	}
+}
+
+func TestGetUserPublicKey(t *testing.T) {
+	// attempt retrieval of a key from a non-existent user
+	resp, err := http.Get(apiRoot + "/alpha/users/deadbeefbeefdead/public-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	// create a user and verify their key after retrieval
+	user := createUserOnServer(t)
+	resp, err = http.Get(apiRoot + "/alpha/users/" + hex.EncodeToString(user.publicID) + "/public-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	obj := struct {
+		PublicKey encodable.Bytes `json:"public_key"`
+	}{}
+	if err = json.NewDecoder(resp.Body).Decode(&obj); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(obj.PublicKey, user.keyPair.Public) {
+		t.Fatalf("Retrieved public key does not match: %s != %s",
+			hex.EncodeToString(obj.PublicKey),
+			hex.EncodeToString(user.keyPair.Public))
 	}
 }
