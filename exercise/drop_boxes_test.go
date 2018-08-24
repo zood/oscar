@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"testing"
 	"time"
@@ -15,6 +16,25 @@ import (
 const dropBoxIDSize = 16
 const watchCommand = 1
 
+func retrievePackage(boxID []byte, token string, t *testing.T) []byte {
+	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), nil)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	rcvdPkg, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return rcvdPkg
+}
 func TestPackageDropping(t *testing.T) {
 	user := createUserOnServer(t)
 	accessToken := login(user, t)
@@ -35,21 +55,7 @@ func TestPackageDropping(t *testing.T) {
 	}
 
 	// now try to pick it up
-	req, _ = http.NewRequest(http.MethodGet, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), nil)
-	req.Header.Add("X-Oscar-Access-Token", accessToken)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
-	}
-
-	rcvdPkg, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rcvdPkg := retrievePackage(boxID, accessToken, t)
 	if !bytes.Equal(rcvdPkg, pkg) {
 		t.Fatal("Downloaded package doesn't match what was dropped off")
 	}
@@ -137,4 +143,57 @@ func TestPackageWatching(t *testing.T) {
 		t.Fatal("Didn't receive the package in time")
 	}
 	conn.Close()
+}
+
+func TestMultiplePackageDrops(t *testing.T) {
+	user := createUserOnServer(t)
+	token := login(user, t)
+
+	// create 3 packages
+	pkgs := map[string][]byte{}
+	for i := 0; i < 3; i++ {
+		boxID := make([]byte, dropBoxIDSize)
+		if err := sodium.Random(boxID); err != nil {
+			t.Fatal(err)
+		}
+		data := make([]byte, (i+10)*3)
+		if err := sodium.Random(data); err != nil {
+			t.Fatal(err)
+		}
+		pkgs[hex.EncodeToString(boxID)] = data
+	}
+
+	buf := &bytes.Buffer{}
+	wr := multipart.NewWriter(buf)
+	for hexBoxID, data := range pkgs {
+		formWriter, err := wr.CreateFormField(hexBoxID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = formWriter.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wr.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, apiRoot+"/alpha/drop-boxes/send", buf)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	req.Header.Add("Content-Type", wr.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(readError(resp.Body))
+	}
+
+	// verify that the packages were all dropped
+	for hexBoxID, pkg := range pkgs {
+		boxID, _ := hex.DecodeString(hexBoxID)
+		rcvdPkg := retrievePackage(boxID, token, t)
+		if !bytes.Equal(rcvdPkg, pkg) {
+			t.Fatal("package doesn't match what was dropped")
+		}
+	}
 }

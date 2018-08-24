@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
 
 	"zood.xyz/oscar/base62"
@@ -265,6 +266,53 @@ func TestGetUserPublicKey(t *testing.T) {
 	}
 	if !bytes.Equal(obj.PublicKey, user.keyPair.Public) {
 		t.Fatalf("Retrieved public key does not match: %s != %s",
+			hex.EncodeToString(obj.PublicKey),
+			hex.EncodeToString(user.keyPair.Public))
+	}
+}
+
+func TestGetUserInfo(t *testing.T) {
+	user := createUserOnServer(t)
+	token := login(user, t)
+
+	// attempt retrieval of a non-existent user
+	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/users/deadbeefbeefdead", nil)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	// retrieve our own info, then verify that it matches
+	req, _ = http.NewRequest(http.MethodGet, apiRoot+"/alpha/users/"+hex.EncodeToString(user.publicID), nil)
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+
+	obj := struct {
+		Username  string          `json:"username"`
+		PublicKey encodable.Bytes `json:"public_key"`
+	}{}
+	if err = json.NewDecoder(resp.Body).Decode(&obj); err != nil {
+		t.Fatal(err)
+	}
+
+	// verify that the data matches
+	if obj.Username != strings.ToLower(user.username) {
+		t.Fatalf("username does not match: %s != %s", obj.Username, strings.ToLower(user.username))
+	}
+	if !bytes.Equal(obj.PublicKey, user.keyPair.Public) {
+		t.Fatalf("public key does not match: %s != %s",
 			hex.EncodeToString(obj.PublicKey),
 			hex.EncodeToString(user.keyPair.Public))
 	}
