@@ -12,41 +12,6 @@ import (
 	"zood.xyz/oscar/encodable"
 )
 
-// a type that conforms to the json.Marshal and json.Unmarshal interfaces,
-// which converts the bytes between []byte and base64
-// type encodableBytes []byte
-
-// func (eb encodableBytes) MarshalJSON() ([]byte, error) {
-// 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(eb)))
-// 	base64.StdEncoding.Encode(dst, eb)
-// 	final := append([]byte{'"'}, dst...)
-// 	final = append(final, '"')
-// 	return final, nil
-// }
-
-// func (eb *encodableBytes) UnmarshalJSON(data []byte) error {
-// 	if len(data) < 2 {
-// 		return errors.New("byte data must be encoded as a base64 string")
-// 	}
-// 	if data[0] != '"' || data[len(data)-1] != '"' {
-// 		return errors.New("base64 string must be surrounded by double quotes")
-// 	}
-// 	encodedData := data[1 : len(data)-1]
-// 	decodedData := make([]byte, base64.StdEncoding.DecodedLen(len(encodedData)))
-// 	l, err := base64.StdEncoding.Decode(decodedData, encodedData)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	// with base64, you have to check the length that it ended up being decoded
-// 	// into, because the value from DecodedLen() is max, not the exact amount
-// 	*eb = decodedData[:l]
-// 	return nil
-// }
-
-// func (eb encodableBytes) Value() (driver.Value, error) {
-// 	return []byte(eb), nil
-// }
-
 // Message ...
 type Message struct {
 	ID             int64           `json:"id"`
@@ -233,20 +198,25 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 		return
 	}
 
-	// NOTE:
-	// We should only push messages to iOS if it's urgent, because APNs
-	// will throttle us instead of holding on to messages like FCM.
-
-	// if the payload is small, send the entire thing
-	if len(buf) <= 3584 {
-		sendFirebaseMessage(userID, msgMap, urgent)
-		if urgent {
-			sendAPNSMessage(userID, msgMap, urgent)
-		}
+	// try to publish it directly via socket
+	willPublish := socketsPubSub.Pub(buf, userID)
+	if willPublish {
+		// no need to try pushing through FCM or APNS
 		return
 	}
 
-	// it's too big, so we'll tell the client to sync instead
+	// only bother pushing via FCM or APNS if it's urgent
+	if !urgent {
+		return
+	}
+
+	if len(buf) <= 3584 {
+		sendFirebaseMessage(userID, msgMap, urgent)
+		sendAPNSMessage(userID, msgMap, urgent)
+		return
+	}
+
+	// It's too big. Has it been persisted, and thus can we send a sync message?
 	if msg.ID == 0 {
 		logErr(errors.New("unable to send sync message via FCM for transient message"))
 		return
@@ -257,7 +227,5 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 		MessageID string `json:"message_id"`
 	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}
 	sendFirebaseMessage(userID, syncPayload, urgent)
-	if urgent {
-		sendAPNSMessage(userID, syncPayload, urgent)
-	}
+	sendAPNSMessage(userID, syncPayload, urgent)
 }
