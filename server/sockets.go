@@ -15,7 +15,7 @@ const (
 	socketCmdIgnore      = 2
 )
 
-var socketsPubSub = pubsub.NewInt64()
+var messagesPubSub = pubsub.NewInt64()
 
 type socketServer struct {
 	conn     *websocket.Conn
@@ -67,7 +67,7 @@ func (ss socketServer) readConn() {
 }
 
 func (ss socketServer) start() {
-	ss.messages = socketsPubSub.Sub(ss.userID)
+	ss.messages = messagesPubSub.Sub(ss.userID)
 	go ss.readConn()
 	go ss.writeConn()
 }
@@ -81,7 +81,7 @@ func (ss socketServer) stop() {
 		dropBoxPubSub.Unsub(sub, hexBoxID)
 	}
 	// stop listening for messages
-	socketsPubSub.Unsub(ss.messages, ss.userID)
+	messagesPubSub.Unsub(ss.messages, ss.userID)
 
 	ss.conn.Close()
 }
@@ -179,11 +179,9 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if userID == 0 {
-		log.Printf("not a known user")
 		sendInvalidAccessToken(w)
 		return
 	}
-	log.Printf("This user %d", userID)
 
 	upgrade := websocket.Upgrader{
 		ReadBufferSize:  1024,

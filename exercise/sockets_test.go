@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"net/http"
 	"testing"
 	"time"
+
+	"zood.xyz/oscar/encodable"
 
 	"github.com/gorilla/websocket"
 	"zood.xyz/oscar/sodium"
@@ -17,24 +20,39 @@ const (
 	socketCmdIgnore      = 2
 )
 
+type pushedMessage struct {
+	ID         *string         `json:"id,omitempty"`
+	CipherText encodable.Bytes `json:"cipher_text"`
+	Nonce      encodable.Bytes `json:"nonce"`
+	SenderID   encodable.Bytes `json:"sender_id"`
+	SentDate   string          `json:"sent_date"`
+}
+
 type socketClient struct {
 	conn   *websocket.Conn
+	finish chan bool
 	inbox  <-chan []byte
 	outbox chan<- []byte
 }
 
 func (sc *socketClient) readConn(writableInbox chan []byte, t *testing.T) {
-	msgType, buf, err := sc.conn.ReadMessage()
-	if err != nil {
-		return
+	defer close(writableInbox)
+	for {
+		msgType, buf, err := sc.conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		if msgType != websocket.BinaryMessage {
+			t.Fatal("socket received a non-binary message")
+		}
+		log.Printf("client read: %s", buf[:6])
+		writableInbox <- buf
 	}
-	if msgType != websocket.BinaryMessage {
-		t.Fatal("socket received a non-binary message")
-	}
-	writableInbox <- buf
 }
 
 func (sc *socketClient) start(t *testing.T) {
+	sc.finish = make(chan bool)
+
 	writableInbox := make(chan []byte, 5)
 	sc.inbox = writableInbox
 	go sc.readConn(writableInbox, t)
@@ -44,14 +62,25 @@ func (sc *socketClient) start(t *testing.T) {
 	go sc.writeConn(readableOutbox, t)
 }
 
+func (sc *socketClient) stop() {
+	sc.conn.Close()
+	close(sc.finish)
+}
+
 func (sc *socketClient) writeConn(readableOutbox chan []byte, t *testing.T) {
-	for msg := range readableOutbox {
-		if msg == nil {
+	defer close(readableOutbox)
+	for {
+		select {
+		case <-sc.finish:
 			return
-		}
-		err := sc.conn.WriteMessage(websocket.BinaryMessage, msg)
-		if err != nil {
-			t.Fatal(err)
+		case msg := <-readableOutbox:
+			if msg == nil {
+				return
+			}
+			err := sc.conn.WriteMessage(websocket.BinaryMessage, msg)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }
@@ -88,8 +117,6 @@ func TestSocketServer(t *testing.T) {
 		shouldBe = append(shouldBe, pkg1...)
 		if !bytes.Equal(rcvdPkg, shouldBe) {
 			t.Fatal("Received package did not match expected")
-		} else {
-			log.Printf("the package matched")
 		}
 	}
 
@@ -104,11 +131,31 @@ func TestSocketServer(t *testing.T) {
 	}
 	sendMessage(msg, user.publicID, otherToken, t)
 
-	// Our next notification on the socket should be a message from the user.
+	// Our next notification on the socket should be a message from the other user.
 	select {
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("did not receive the message notification in time")
-	case rcvdMsg := <-sc.inbox:
-
+	case rcvdMsgBytes := <-sc.inbox:
+		log.Printf("rcvdMsg: %s", rcvdMsgBytes)
+		pMsg := pushedMessage{}
+		if err = json.Unmarshal(rcvdMsgBytes, &pMsg); err != nil {
+			t.Fatal(err)
+		}
+		// validate all the fields
+		// It was a transient message, so the id should be nil
+		if pMsg.ID != nil && *pMsg.ID != "0" {
+			t.Fatalf("Expecting a nil/0 message id, but found %s", *pMsg.ID)
+		}
+		if !bytes.Equal(pMsg.CipherText, msg.CipherText) {
+			t.Fatal("Cipher text doesn't match")
+		}
+		if !bytes.Equal(pMsg.Nonce, msg.Nonce) {
+			t.Fatal("Nonce doesn't match")
+		}
+		if !bytes.Equal(pMsg.SenderID, otherUser.publicID) {
+			t.Fatal("Sender id is incorrect")
+		}
 	}
+
+	sc.stop()
 }

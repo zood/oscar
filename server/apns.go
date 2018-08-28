@@ -108,9 +108,6 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
-	if shouldLogDebug() {
-		log.Printf("sendAPNSMessage => %s", rs.Username(userID))
-	}
 	tokens, err := rs.APNSTokensRaw(userID)
 	if err != nil {
 		logErr(err)

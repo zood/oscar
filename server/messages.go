@@ -199,11 +199,7 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 	}
 
 	// try to publish it directly via socket
-	willPublish := socketsPubSub.Pub(buf, userID)
-	if willPublish {
-		// no need to try pushing through FCM or APNS
-		return
-	}
+	messagesPubSub.Pub(buf, userID)
 
 	// only bother pushing via FCM or APNS if it's urgent
 	if !urgent {
