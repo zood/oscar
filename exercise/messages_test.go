@@ -47,6 +47,25 @@ func retrieveMessages(token string, t *testing.T) []inboundMessage {
 	return msgs
 }
 
+func sendMessage(msg outboundMessage, to []byte, token string, t *testing.T) {
+	msgJSON, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodPost,
+		apiRoot+"/alpha/users/"+hex.EncodeToString(to)+"/messages",
+		bytes.NewReader(msgJSON))
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+}
+
 func TestMessageTransfers(t *testing.T) {
 	userA := createUserOnServer(t)
 	tokenA := login(userA, t)
@@ -60,23 +79,9 @@ func TestMessageTransfers(t *testing.T) {
 		Urgent:     false,
 		Transient:  false,
 	}
-	msgJSON, err := json.Marshal(outMsg)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	req, _ := http.NewRequest(http.MethodPost,
-		apiRoot+"/alpha/users/"+hex.EncodeToString(userB.publicID)+"/messages",
-		bytes.NewReader(msgJSON))
-	req.Header.Add("X-Oscar-Access-Token", tokenA)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
-	}
+	// user A sends to user B
+	sendMessage(outMsg, userB.publicID, tokenA, t)
 
 	// user B checks for the message
 	msgs := retrieveMessages(tokenB, t)
@@ -100,9 +105,9 @@ func TestMessageTransfers(t *testing.T) {
 	}
 
 	// user B deletes the message from the server
-	req, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/alpha/messages/%d", apiRoot, inMsg.ID), nil)
+	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/alpha/messages/%d", apiRoot, inMsg.ID), nil)
 	req.Header.Add("X-Oscar-Access-Token", tokenB)
-	resp, err = http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

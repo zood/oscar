@@ -16,6 +16,19 @@ import (
 const dropBoxIDSize = 16
 const watchCommand = 1
 
+func dropPackage(pkg []byte, boxID []byte, token string, t *testing.T) {
+	req, _ := http.NewRequest(http.MethodPut, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), bytes.NewReader(pkg))
+	req.Header.Add("X-Oscar-Access-Token", token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	}
+}
+
 func retrievePackage(boxID []byte, token string, t *testing.T) []byte {
 	req, _ := http.NewRequest(http.MethodGet, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), nil)
 	req.Header.Add("X-Oscar-Access-Token", token)
@@ -121,16 +134,17 @@ func TestPackageWatching(t *testing.T) {
 
 	// drop a package
 	pkg := []byte("N. Bluth")
-	req, _ := http.NewRequest(http.MethodPut, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), bytes.NewReader(pkg))
-	req.Header.Add("X-Oscar-Access-Token", accessToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Incorrect status code: %d", resp.StatusCode)
-	}
+	dropPackage(pkg, boxID, accessToken, t)
+	// req, _ := http.NewRequest(http.MethodPut, apiRoot+"/alpha/drop-boxes/"+hex.EncodeToString(boxID), bytes.NewReader(pkg))
+	// req.Header.Add("X-Oscar-Access-Token", accessToken)
+	// resp, err := http.DefaultClient.Do(req)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// defer resp.Body.Close()
+	// if resp.StatusCode != http.StatusOK {
+	// 	t.Fatalf("Incorrect status code: %d", resp.StatusCode)
+	// }
 
 	select {
 	case rcvdPkg := <-msgChan:

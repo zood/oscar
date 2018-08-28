@@ -29,6 +29,13 @@ type socketServer struct {
 func (ss socketServer) ignoreBox(boxID []byte) {
 	hexID := hex.EncodeToString(boxID)
 	sub := ss.pkgSubs[hexID]
+	if sub == nil {
+		// We don't have a subscription for this box. Client error!
+		log.Printf("A client tried unsubscribing from a drop box to which they hadn't subscribed")
+		return
+	}
+	dropBoxPubSub.Unsub(sub, hexID)
+	delete(ss.pkgSubs, hexID)
 }
 
 func (ss socketServer) readConn() {
@@ -69,12 +76,14 @@ func (ss socketServer) stop() {
 	// wait here until someone tells us to shut down
 	<-ss.closed
 
+	// stop listening for packages
 	for hexBoxID, sub := range ss.pkgSubs {
 		dropBoxPubSub.Unsub(sub, hexBoxID)
 	}
+	// stop listening for messages
+	socketsPubSub.Unsub(ss.messages, ss.userID)
 
 	ss.conn.Close()
-
 }
 
 func (ss socketServer) watchBox(boxID []byte) {
@@ -86,6 +95,7 @@ func (ss socketServer) watchBox(boxID []byte) {
 
 	// if there's already a sub for this id, skip it
 	if ss.pkgSubs[hexID] != nil {
+		log.Printf("A client requested a 'watch' for the same box more than once")
 		return
 	}
 
@@ -103,14 +113,15 @@ func (ss socketServer) watchBox(boxID []byte) {
 	}
 
 	go func() {
+		defer log.Printf("sockets - %s goroutine is exiting", hexID)
 		for {
 			select {
 			case <-ss.closed:
 				return
 			case pkg := <-sub:
 				if pkg == nil {
-					// The channel was closed. We shouldn't be relying on
-					// this behavior, but we do the check just in case.
+					// The channel was closed. Hopefully, due to an unsubscribe, and not a bug.
+					close(ss.pkgs)
 					return
 				}
 				buf := append([]byte{socketCmdWatch}, boxID...)
@@ -127,10 +138,16 @@ func (ss socketServer) writeConn() {
 	for {
 		select {
 		case msg := <-ss.messages:
+			if msg == nil {
+				return
+			}
 			if err := ss.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
 				return
 			}
 		case pkg := <-ss.pkgs:
+			if pkg == nil {
+				return
+			}
 			if err := ss.conn.WriteMessage(websocket.BinaryMessage, pkg); err != nil {
 				return
 			}
