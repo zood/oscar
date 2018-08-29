@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	socketCmdNop    byte = 0
-	socketCmdWatch       = 1
-	socketCmdIgnore      = 2
+	socketCmdNop     byte = 0
+	socketCmdWatch        = 1
+	socketCmdIgnore       = 2
+	socketCmdMessage      = 3
 )
 
 type pushedMessage struct {
@@ -136,9 +137,15 @@ func TestSocketServer(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("did not receive the message notification in time")
 	case rcvdMsgBytes := <-sc.inbox:
-		log.Printf("rcvdMsg: %s", rcvdMsgBytes)
+		// log.Printf("rcvdMsg: %s", rcvdMsgBytes)
+		if len(rcvdMsgBytes) < 2 {
+			t.Fatal("message is too short")
+		}
+		if rcvdMsgBytes[0] != socketCmdMessage {
+			t.Fatalf("Incorrect/missing command prefix. Found prefix %d", rcvdMsgBytes[0])
+		}
 		pMsg := pushedMessage{}
-		if err = json.Unmarshal(rcvdMsgBytes, &pMsg); err != nil {
+		if err = json.Unmarshal(rcvdMsgBytes[1:], &pMsg); err != nil {
 			t.Fatal(err)
 		}
 		// validate all the fields

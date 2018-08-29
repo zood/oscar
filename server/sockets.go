@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	socketCmdNop    byte = 0
-	socketCmdWatch       = 1
-	socketCmdIgnore      = 2
+	socketCmdNop     byte = 0
+	socketCmdWatch        = 1
+	socketCmdIgnore       = 2
+	socketCmdMessage      = 3
 )
 
 var messagesPubSub = pubsub.NewInt64()
@@ -113,7 +114,6 @@ func (ss socketServer) watchBox(boxID []byte) {
 	}
 
 	go func() {
-		defer log.Printf("sockets - %s goroutine is exiting", hexID)
 		for {
 			select {
 			case <-ss.closed:
@@ -141,7 +141,8 @@ func (ss socketServer) writeConn() {
 			if msg == nil {
 				return
 			}
-			if err := ss.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+			buf := append([]byte{socketCmdMessage}, msg...)
+			if err := ss.conn.WriteMessage(websocket.BinaryMessage, buf); err != nil {
 				return
 			}
 		case pkg := <-ss.pkgs:
