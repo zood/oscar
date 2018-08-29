@@ -33,11 +33,6 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if userID == sessionUserID {
-		sendBadReq(w, "You can't send a message to yourself")
-		return
-	}
-
 	body := struct {
 		CipherText encodable.Bytes `json:"cipher_text"`
 		Nonce      encodable.Bytes `json:"nonce"`
