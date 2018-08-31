@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -15,10 +14,14 @@ import (
 )
 
 const (
-	socketCmdNop     byte = 0
-	socketCmdWatch        = 1
-	socketCmdIgnore       = 2
-	socketCmdMessage      = 3
+	socketClientCmdNop    byte = 0
+	socketClientCmdWatch       = 1
+	socketClientCmdIgnore      = 2
+)
+
+const (
+	socketServerCmdPackage          byte = 1
+	socketServerCmdPushNotification      = 2
 )
 
 type pushedMessage struct {
@@ -46,7 +49,6 @@ func (sc *socketClient) readConn(writableInbox chan []byte, t *testing.T) {
 		if msgType != websocket.BinaryMessage {
 			t.Fatal("socket received a non-binary message")
 		}
-		log.Printf("client read: %s", buf[:6])
 		writableInbox <- buf
 	}
 }
@@ -107,14 +109,14 @@ func TestSocketServer(t *testing.T) {
 	dropPackage(pkg1, boxID, token, t)
 
 	// send a watch command for that box
-	sc.outbox <- append([]byte{socketCmdWatch}, boxID...)
+	sc.outbox <- append([]byte{socketClientCmdWatch}, boxID...)
 
 	// we should get a box notification message back on the socket
 	select {
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("did not receive box notification back in time")
 	case rcvdPkg := <-sc.inbox:
-		shouldBe := append([]byte{socketCmdWatch}, boxID...)
+		shouldBe := append([]byte{socketServerCmdPackage}, boxID...)
 		shouldBe = append(shouldBe, pkg1...)
 		if !bytes.Equal(rcvdPkg, shouldBe) {
 			t.Fatal("Received package did not match expected")
@@ -141,7 +143,7 @@ func TestSocketServer(t *testing.T) {
 		if len(rcvdMsgBytes) < 2 {
 			t.Fatal("message is too short")
 		}
-		if rcvdMsgBytes[0] != socketCmdMessage {
+		if rcvdMsgBytes[0] != socketServerCmdPushNotification {
 			t.Fatalf("Incorrect/missing command prefix. Found prefix %d", rcvdMsgBytes[0])
 		}
 		pMsg := pushedMessage{}

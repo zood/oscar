@@ -10,10 +10,14 @@ import (
 )
 
 const (
-	socketCmdNop     byte = 0
-	socketCmdWatch        = 1
-	socketCmdIgnore       = 2
-	socketCmdMessage      = 3
+	socketClientCmdNop    byte = 0
+	socketClientCmdWatch       = 1
+	socketClientCmdIgnore      = 2
+)
+
+const (
+	socketServerCmdPackage          byte = 1
+	socketServerCmdPushNotification      = 2
 )
 
 var messagesPubSub = pubsub.NewInt64()
@@ -56,10 +60,10 @@ func (ss socketServer) readConn() {
 			continue
 		}
 		switch buf[0] {
-		case socketCmdNop:
-		case socketCmdWatch:
+		case socketClientCmdNop:
+		case socketClientCmdWatch:
 			ss.watchBox(buf[1:])
-		case socketCmdIgnore:
+		case socketClientCmdIgnore:
 			ss.ignoreBox(buf[1:])
 		default:
 			log.Printf("unknown socket command: %d", buf[0])
@@ -124,7 +128,7 @@ func (ss socketServer) watchBox(boxID []byte) {
 					close(ss.pkgs)
 					return
 				}
-				buf := append([]byte{socketCmdWatch}, boxID...)
+				buf := append([]byte{socketServerCmdPackage}, boxID...)
 				buf = append(buf, pkg...)
 				// Send it to our writing goroutine to send it across
 				// the socket,
@@ -141,7 +145,7 @@ func (ss socketServer) writeConn() {
 			if msg == nil {
 				return
 			}
-			buf := append([]byte{socketCmdMessage}, msg...)
+			buf := append([]byte{socketServerCmdPushNotification}, msg...)
 			if err := ss.conn.WriteMessage(websocket.BinaryMessage, buf); err != nil {
 				return
 			}

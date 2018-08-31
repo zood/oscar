@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -42,11 +40,11 @@ func retrieveMessages(token string, t *testing.T) []inboundMessage {
 	}
 
 	msgs := make([]inboundMessage, 0)
-	buf, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	log.Printf("rm: %s", buf)
+	// buf, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// log.Printf("rm: %s", buf)
 	if err = json.NewDecoder(resp.Body).Decode(&msgs); err != nil {
 		t.Fatal(err)
 	}
