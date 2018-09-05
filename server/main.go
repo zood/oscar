@@ -118,8 +118,8 @@ func installEndPoints(r *mux.Router) {
 
 	r.Handle("/public-key", logHandler(getServerPublicKeyHandler)).Methods("GET")
 
-	r.Handle("/sessions/{username}/challenge", logHandler(createAuthChallengeHandler)).Methods("POST")
-	r.Handle("/sessions/{username}/challenge-response", logHandler(finishAuthChallengeHandler)).Methods("POST")
+	r.Handle("/sessions/{username}/challenge", logHandler(corsHandler(createAuthChallengeHandler))).Methods("POST")
+	r.Handle("/sessions/{username}/challenge-response", logHandler(corsHandler(finishAuthChallengeHandler))).Methods("POST")
 
 	r.Handle("/sockets", logHandler(createSocketHandler)).Methods(http.MethodGet)
 
