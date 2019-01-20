@@ -164,7 +164,7 @@ func TestInsertUser(t *testing.T) {
 	aliceToken := aliceVerificationToken
 	aliceUsername := "alice"
 	alice = relstor.UserRecord{
-		Email: &aliceEmail,
+		Email:                       &aliceEmail,
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -230,7 +230,7 @@ func TestInsertUser(t *testing.T) {
 	bobEmail := "bob@gmail.com"
 	bobToken := bobVerificationToken
 	bob = relstor.UserRecord{
-		Email: &bobEmail,
+		Email:                       &bobEmail,
 		PasswordHashAlgorithm:       "argon2i13",
 		PasswordHashMemoryLimit:     16384,
 		PasswordHashOperationsLimit: 3,
