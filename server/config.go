@@ -9,6 +9,7 @@ import (
 	"zood.xyz/oscar/boltdb"
 	"zood.xyz/oscar/gcs"
 	"zood.xyz/oscar/localdisk"
+	"zood.xyz/oscar/mailgun"
 	"zood.xyz/oscar/mariadb"
 	"zood.xyz/oscar/sodium"
 
@@ -27,10 +28,8 @@ type configuration struct {
 		Secret string `json:"secret"`
 	} `json:"asymmetric_keys"`
 	Email struct {
-		SMTPUser     string `json:"smtp_user"`
-		SMTPPassword string `json:"smtp_password"`
-		SMTPServer   string `json:"smtp_server"`
-		SMTPPort     int    `json:"smtp_port"`
+		MailgunAPIKey string `json:"mailgun_api_key"`
+		Domain        string `json:"domain"`
 	} `json:"email"`
 	FileStorage struct {
 		Type                 string `json:"type"`
@@ -150,11 +149,15 @@ func applyConfigFile(confPath string) (*configuration, error) {
 		}
 	}
 
-	// SMTP client info
-	emailConfiguration.smtpUser = conf.Email.SMTPUser
-	emailConfiguration.smtpPassword = conf.Email.SMTPPassword
-	emailConfiguration.smtpServer = conf.Email.SMTPServer
-	emailConfiguration.smtpPort = conf.Email.SMTPPort
+	// mailgun info
+	if conf.Email.MailgunAPIKey == "" {
+		return nil, errors.New("mailgun api key is missing")
+	}
+	if conf.Email.Domain == "" {
+		return nil, errors.New("email domain is missing")
+	}
+	mailgun.APIKey = conf.Email.MailgunAPIKey
+	mailgun.Domain = conf.Email.Domain
 
 	return &conf, nil
 }

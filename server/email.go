@@ -6,47 +6,28 @@ import (
 	"html/template"
 	"net/http"
 
+	"zood.xyz/oscar/mailgun"
+
 	"github.com/gorilla/mux"
-	gomail "gopkg.in/gomail.v2"
 )
 
 const welcomeEmailTemplate = `Hi,
 
 Thanks for signing up for Zood Location.
 
-To verify your email, click the link below:
-https://e.zood.xyz/verify-email?t={{.Token}}
+To verify your email address, click the link below:
+https://emails.zood.xyz/verify-email?t={{.Token}}
 
 We hope you enjoy using Zood Location as much we enjoyed creating it.
 
 Best,
-Arash
+The Zood Location Team
 
-If you didn't sign up for Zood Location, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. Click the link below to remove your email address from this account:
-https://e.zood.xyz/disavow-email?t={{.Token}}
+If you didn't sign up for Zood Location, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. You can click the link below to remove your email address from this account:
+https://emails.zood.xyz/disavow-email?t={{.Token}}
 `
 
-var emailConfiguration = struct {
-	smtpUser     string
-	smtpPassword string
-	smtpServer   string
-	smtpPort     int
-}{}
-
-func sendEmail(to, from, subject, body string) error {
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", from)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", subject)
-	msg.SetBody("text/plain", body)
-
-	dialer := gomail.NewDialer(emailConfiguration.smtpServer,
-		emailConfiguration.smtpPort,
-		emailConfiguration.smtpUser,
-		emailConfiguration.smtpPassword)
-
-	return dialer.DialAndSend(msg)
-}
+const notificationsEmailAddress = "Zood Location <noreply@notifications.zood.xyz>"
 
 func sendVerificationEmail(token, email string) error {
 	tmpl, err := template.New("").Parse(welcomeEmailTemplate)
@@ -55,7 +36,7 @@ func sendVerificationEmail(token, email string) error {
 	}
 	buf := &bytes.Buffer{}
 	tmpl.Execute(buf, struct{ Token string }{Token: token})
-	return sendEmail(email, "Zood Location <noreply@pijun.io>", "Zood: Email Verification", buf.String())
+	return mailgun.SendEmail(notificationsEmailAddress, email, "Zood Location: Email Verification", buf.String(), nil)
 }
 
 // verifyEmailHandler handles POST /email-verifications
