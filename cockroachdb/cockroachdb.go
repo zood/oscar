@@ -37,7 +37,7 @@ func New(connURI string) (*cockroachDBProvider, error) {
 
 	sqlxdb := sqlx.NewDb(sqldb, "postgres")
 
-	_, err = sqlxdb.Exec("SET database = pijunDb")
+	_, err = sqlxdb.Exec("SET database = oscarDb")
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to set database")
 	}
@@ -78,7 +78,7 @@ func (cdb cockroachDBProvider) InsertUser(user relstor.UserRecord, verificationT
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to insert user into table")
 	}
-	defer rows.Next()
+	defer rows.Close()
 	var userID int64
 	if rows.Next() {
 		err = rows.Scan(&userID)
@@ -88,6 +88,8 @@ func (cdb cockroachDBProvider) InsertUser(user relstor.UserRecord, verificationT
 	} else {
 		return 0, errors.New("failed to iterate rows to get user id")
 	}
+
+	rows.Close()
 	// if err != nil {
 	// 	return 0, errors.Wrap(err, "failed to insert user into table")
 	// }
@@ -127,7 +129,7 @@ func (cdb cockroachDBProvider) User(username string) (*relstor.UserRecord, error
 			password_hash_operations_limit,
 			password_hash_memory_limit,
 			email
-	FROM users WHERE username=?`
+	FROM users WHERE username=$1`
 	user := relstor.UserRecord{}
 	err := cdb.dbx.Get(&user, query, username)
 	switch err {

@@ -81,7 +81,7 @@ var msgBA relstor.MessageRecord
 func TestMain(m *testing.M) {
 	// build the database tables
 
-	db, err := sql.Open("postgres", "user=root dbname=pijunDb sslmode=disable port=26257") // "postgresql://root@127.0.0.1:26257?sslmode=disable"
+	db, err := sql.Open("postgres", "user=root dbname=oscarDb sslmode=disable port=26257") // "postgresql://root@127.0.0.1:26257?sslmode=disable"
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,13 +91,13 @@ func TestMain(m *testing.M) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS pijunDb")
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS oscarDb")
 	if err != nil {
 		log.Fatal("Failed to create database: ", err)
 	}
-	_, err = db.Exec("SET database = pijunDb")
+	_, err = db.Exec("SET database = oscarDb")
 	if err != nil {
-		log.Fatal("Failed to set database to pijunDb: ", err)
+		log.Fatal("Failed to set database to oscarDb: ", err)
 	}
 
 	// Create the tables
@@ -120,7 +120,7 @@ func TestMain(m *testing.M) {
 func db(t *testing.T) *cockroachDBProvider {
 	var err error
 	cdbOnce.Do(func() {
-		cdb, err = New("postgresql://root@127.0.0.1:26257/pijunDb?sslmode=disable")
+		cdb, err = New("postgresql://root@127.0.0.1:26257/oscarDb?sslmode=disable")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,7 +138,7 @@ func TestInsertUser(t *testing.T) {
 	aliceToken := aliceVerificationToken
 	aliceUsername := "alice"
 	alice = relstor.UserRecord{
-		Email: &aliceEmail,
+		Email:                       &aliceEmail,
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -204,7 +204,7 @@ func TestInsertUser(t *testing.T) {
 	bobEmail := "bob@gmail.com"
 	bobToken := bobVerificationToken
 	bob = relstor.UserRecord{
-		Email: &bobEmail,
+		Email:                       &bobEmail,
 		PasswordHashAlgorithm:       "argon2i13",
 		PasswordHashMemoryLimit:     16384,
 		PasswordHashOperationsLimit: 3,
