@@ -128,6 +128,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/PuerkitoBio/goquery",
+			"repository": "https://github.com/PuerkitoBio/goquery",
+			"vcs": "git",
+			"revision": "3dcf72e6c17f694381a21592651ca1464ded0e10",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/Shopify/sarama",
 			"repository": "https://github.com/Shopify/sarama",
 			"vcs": "git",
@@ -148,6 +156,14 @@
 			"repository": "https://github.com/alecthomas/units",
 			"vcs": "git",
 			"revision": "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/andybalholm/cascadia",
+			"repository": "https://github.com/andybalholm/cascadia",
+			"vcs": "git",
+			"revision": "680b6a57bda4f657485ad44bdea42342ead737bc",
 			"branch": "master",
 			"notests": true
 		},
@@ -320,6 +336,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/mattn/go-sqlite3",
+			"repository": "https://github.com/mattn/go-sqlite3",
+			"vcs": "git",
+			"revision": "ad30583d8387ce8118f8605eaeb3b4f7b4ae0ee1",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/matttproud/golang_protobuf_extensions/pbutil",
 			"repository": "https://github.com/matttproud/golang_protobuf_extensions",
 			"vcs": "git",
@@ -488,6 +512,15 @@
 			"revision": "45e771701b814666a7eb299e6c7a57d0b1799e91",
 			"branch": "master",
 			"path": "context",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/net/html",
+			"repository": "https://go.googlesource.com/net",
+			"vcs": "git",
+			"revision": "b774fd8d5c0f43f4a07fc5c3dd6cba5c4dc21e77",
+			"branch": "master",
+			"path": "/html",
 			"notests": true
 		},
 		{

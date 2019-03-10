@@ -9,7 +9,7 @@ import (
 	"runtime"
 )
 
-func logHandler(next http.HandlerFunc) http.HandlerFunc {
+func logHandler(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if shouldLogDebug() {
 			log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)

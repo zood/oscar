@@ -11,6 +11,7 @@ import (
 
 	"zood.xyz/oscar/base62"
 	"zood.xyz/oscar/encodable"
+	"zood.xyz/oscar/kvstor"
 	"zood.xyz/oscar/relstor"
 	"zood.xyz/oscar/sodium"
 
@@ -48,6 +49,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 
+	kvs := keyValueStorage(r.Context())
 	id, err := kvs.UserIDFromPublicID(pubID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -70,7 +72,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubID, sErr := createUser(user)
+	pubID, sErr := createUser(database(r.Context()), keyValueStorage(r.Context()), user)
 	if sErr != nil {
 		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
@@ -85,7 +87,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}{ID: pubID})
 }
 
-func createUser(user User) ([]byte, *serverError) {
+func createUser(db relstor.Provider, kvs kvstor.Provider, user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
@@ -160,7 +162,7 @@ func createUser(user User) ([]byte, *serverError) {
 	}
 
 	// check if the username is already in use
-	available, err := rs.UsernameAvailable(user.Username)
+	available, err := db.UsernameAvailable(user.Username)
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
@@ -180,9 +182,9 @@ func createUser(user User) ([]byte, *serverError) {
 		WrappedSecretKeyNonce:       user.WrappedSecretKeyNonce,
 		WrappedSymmetricKey:         user.WrappedSymmetricKey,
 		WrappedSymmetricKeyNonce:    user.WrappedSymmetricKeyNonce,
-		Email: &user.Email,
+		Email:                       &user.Email,
 	}
-	id, err := rs.InsertUser(userRec, emailVerificationToken)
+	id, err := db.InsertUser(userRec, emailVerificationToken)
 	if err != nil {
 		logErr(err)
 		return nil, newInternalErr()
@@ -237,7 +239,8 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubKey, err := rs.UserPublicKey(userID)
+	db := database(r.Context())
+	pubKey, err := db.UserPublicKey(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -258,7 +261,8 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	user := User{}
 	var err error
-	user.ID, user.PublicKey, err = rs.LimitedUserInfo(username)
+	db := database(r.Context())
+	user.ID, user.PublicKey, err = db.LimitedUserInfo(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -269,6 +273,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Username = username
+	kvs := keyValueStorage(r.Context())
 	user.PublicID, err = kvs.PublicIDFromUserID(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -283,7 +288,8 @@ func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, pubKey, err := rs.LimitedUserInfoID(userID)
+	db := database(r.Context())
+	username, pubKey, err := db.LimitedUserInfoID(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

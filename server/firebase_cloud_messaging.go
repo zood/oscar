@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"zood.xyz/oscar/relstor"
 )
 
 var gFCMServerKey string
@@ -47,8 +48,8 @@ type fcmMulticastMessage struct {
 	Data     interface{} `json:"data"`
 }
 
-func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
-	tokens, err := rs.FCMTokensRaw(userID)
+func sendFirebaseMessage(db relstor.Provider, userID int64, payload interface{}, urgent bool) {
+	tokens, err := db.FCMTokensRaw(userID)
 	if err != nil {
 		logErr(err)
 		return
@@ -130,16 +131,16 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 			// update the old token to the new one.
 			log.Printf("| MessageID: %v, RegID: %v", result.MessageID, result.RegistrationID)
 			// check if we already have the canonical token for this user
-			tokRec, err := rs.FCMTokenUser(userID, *result.RegistrationID)
+			tokRec, err := db.FCMTokenUser(userID, *result.RegistrationID)
 			if err == nil && tokRec != nil {
 				// we do, so drop the row with the old token
-				err := rs.DeleteFCMToken(tokens[i])
+				err := db.DeleteFCMToken(tokens[i])
 				if err != nil {
 					logErr(err)
 				}
 			} else if err == nil {
 				// nope, we don't. So replace the old token.
-				rowsAffected, err := rs.ReplaceFCMToken(tokens[i], *result.RegistrationID)
+				rowsAffected, err := db.ReplaceFCMToken(tokens[i], *result.RegistrationID)
 				if err != nil {
 					logErr(err)
 				} else {
@@ -164,7 +165,7 @@ func sendFirebaseMessage(userID int64, payload interface{}, urgent bool) {
 				fallthrough
 			case "NotRegistered":
 				// remove the token
-				rs.DeleteFCMToken(tokens[i])
+				db.DeleteFCMToken(tokens[i])
 			default:
 				logErr(fmt.Errorf("error sending via fcm: %s\nuser id: %d", *result.Error, userID))
 			}
@@ -190,14 +191,15 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	ftr, err := rs.FCMToken(body.Token)
+	db := database(r.Context())
+	ftr, err := db.FCMToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 	if ftr == nil {
 		// insert the token, then return
-		err = rs.InsertFCMToken(userID, body.Token)
+		err = db.InsertFCMToken(userID, body.Token)
 		if err != nil {
 			sendInternalErr(w, err)
 		}
@@ -214,7 +216,7 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = rs.UpdateUserIDOfFCMToken(userID, body.Token)
+	err = db.UpdateUserIDOfFCMToken(userID, body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -227,7 +229,8 @@ func deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := mux.Vars(r)["token"]
 
-	err := rs.DeleteFCMTokenOfUser(userID, token)
+	db := database(r.Context())
+	err := db.DeleteFCMTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"zood.xyz/oscar/internal/pubsub"
+	"zood.xyz/oscar/kvstor"
 )
 
 const (
@@ -25,6 +26,7 @@ var messagesPubSub = pubsub.NewInt64()
 type socketServer struct {
 	conn     *websocket.Conn
 	closed   chan bool
+	kvs      kvstor.Provider
 	messages chan []byte
 	pkgs     chan []byte
 	pkgSubs  map[string]chan []byte
@@ -109,7 +111,7 @@ func (ss socketServer) watchBox(boxID []byte) {
 	ss.pkgSubs[hexID] = sub
 
 	// If there's already a package in the dropbox, send it
-	tmp, err := kvs.PickUpPackage(boxID)
+	tmp, err := ss.kvs.PickUpPackage(boxID)
 	if err != nil {
 		logErr(err)
 	}
@@ -162,10 +164,11 @@ func (ss socketServer) writeConn() {
 	}
 }
 
-func newSocketServer(conn *websocket.Conn, userID int64) socketServer {
+func newSocketServer(conn *websocket.Conn, userID int64, kvs kvstor.Provider) socketServer {
 	return socketServer{
 		closed:  make(chan bool),
 		conn:    conn,
+		kvs:     kvs,
 		pkgs:    make(chan []byte, 5),
 		pkgSubs: map[string]chan []byte{},
 		userID:  userID,
@@ -175,7 +178,7 @@ func newSocketServer(conn *websocket.Conn, userID int64) socketServer {
 func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// check the 'Sec-Websocket-Protocol' header for an access token
 	token := r.Header.Get("Sec-Websocket-Protocol")
-	userID, err := verifyAccessToken(token)
+	userID, err := verifyAccessToken(database(r.Context()), token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -197,6 +200,7 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ss := newSocketServer(conn, userID)
+	kvs := keyValueStorage(r.Context())
+	ss := newSocketServer(conn, userID, kvs)
 	ss.start()
 }

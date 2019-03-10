@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"zood.xyz/oscar/encodable"
+	"zood.xyz/oscar/relstor"
 )
 
 // Message ...
@@ -45,12 +46,14 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	db := database(r.Context())
 	if shouldLogInfo() {
 		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
-			rs.Username(sessionUserID), rs.Username(userID),
+			db.Username(sessionUserID), db.Username(userID),
 			body.Urgent, body.Transient)
 	}
 
+	kvs := keyValueStorage(r.Context())
 	msg := Message{}
 	msg.CipherText = body.CipherText
 	msg.Nonce = body.Nonce
@@ -61,7 +64,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !body.Transient {
-		msg.ID, err = rs.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
+		msg.ID, err = db.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -71,7 +74,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 
 	go func() {
-		pushMessageToUser(msg, userID, body.Urgent)
+		pushMessageToUser(db, msg, userID, body.Urgent)
 	}()
 }
 
@@ -86,11 +89,12 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	db := database(r.Context())
 	if shouldLogInfo() {
-		log.Printf("get_message: %s %d", rs.Username(userID), msgID)
+		log.Printf("get_message: %s %d", db.Username(userID), msgID)
 	}
 
-	rec, err := rs.MessageToRecipient(userID, msgID)
+	rec, err := db.MessageToRecipient(userID, msgID)
 	if err != nil {
 		sendInternalErr(w, err)
 	}
@@ -100,6 +104,7 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	kvs := keyValueStorage(r.Context())
 	pubID, err := kvs.PublicIDFromUserID(rec.SenderID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -121,15 +126,17 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 // getMessagesHandler handles GET /messages
 func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
+	db := database(r.Context())
 	if shouldLogInfo() {
-		log.Printf("get_messages: %s", rs.Username(userID))
+		log.Printf("get_messages: %s", db.Username(userID))
 	}
 
-	records, err := rs.MessageRecords(userID)
+	records, err := db.MessageRecords(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
+	kvs := keyValueStorage(r.Context())
 	msgs := make([]Message, 0, 0)
 	for _, r := range records {
 		pubID, err := kvs.PublicIDFromUserID(r.SenderID)
@@ -163,12 +170,13 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	db := database(r.Context())
 	if shouldLogInfo() {
-		log.Printf("delete_message: %s %d", rs.Username(userID), msgID)
+		log.Printf("delete_message: %s %d", db.Username(userID), msgID)
 	}
 
 	// only delete the message if the calling user is also the recipient
-	err = rs.DeleteMessageToRecipient(userID, msgID)
+	err = db.DeleteMessageToRecipient(userID, msgID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -177,7 +185,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(msg Message, userID int64, urgent bool) {
+func pushMessageToUser(db relstor.Provider, msg Message, userID int64, urgent bool) {
 	msgMap := map[string]interface{}{
 		"id":          strconv.FormatInt(msg.ID, 10),
 		"cipher_text": msg.CipherText,
@@ -202,8 +210,8 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 	}
 
 	if len(buf) <= 3584 {
-		sendFirebaseMessage(userID, msgMap, urgent)
-		sendAPNSMessage(userID, msgMap, urgent)
+		sendFirebaseMessage(db, userID, msgMap, urgent)
+		sendAPNSMessage(db, userID, msgMap, urgent)
 		return
 	}
 
@@ -217,6 +225,6 @@ func pushMessageToUser(msg Message, userID int64, urgent bool) {
 		Type      string `json:"type"`
 		MessageID string `json:"message_id"`
 	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}
-	sendFirebaseMessage(userID, syncPayload, urgent)
-	sendAPNSMessage(userID, syncPayload, urgent)
+	sendFirebaseMessage(db, userID, syncPayload, urgent)
+	sendAPNSMessage(db, userID, syncPayload, urgent)
 }

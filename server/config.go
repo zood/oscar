@@ -6,17 +6,13 @@ import (
 	"fmt"
 	"os"
 
-	"zood.xyz/oscar/boltdb"
-	"zood.xyz/oscar/gcs"
-	"zood.xyz/oscar/localdisk"
 	"zood.xyz/oscar/mailgun"
-	"zood.xyz/oscar/mariadb"
 	"zood.xyz/oscar/sodium"
 
 	"github.com/pkg/errors"
 )
 
-type configuration struct {
+type serverConfig struct {
 	APNS struct {
 		KeyID      string `json:"key_id"`
 		P8Path     string `json:"p8_path"`
@@ -46,20 +42,22 @@ type configuration struct {
 	TLS          *bool  `json:"tls,omitempty"`
 }
 
-func applyConfigFile(confPath string) (*configuration, error) {
+var config *serverConfig
+
+func applyConfigFile(confPath string) (*serverConfig, error) {
 	f, err := os.Open(confPath)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open config file")
 	}
 
-	conf := configuration{}
-	err = json.NewDecoder(f).Decode(&conf)
+	cfg := serverConfig{}
+	err = json.NewDecoder(f).Decode(&cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to parse config file")
 	}
 
 	// symmetric key
-	oscarSymKey, err = hex.DecodeString(conf.SymmetricKey)
+	oscarSymKey, err = hex.DecodeString(cfg.SymmetricKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "sym key decode failed")
 	}
@@ -68,11 +66,11 @@ func applyConfigFile(confPath string) (*configuration, error) {
 	}
 
 	// public/private keys
-	oscarKeyPair.Public, err = hex.DecodeString(conf.AsymmetricKeys.Public)
+	oscarKeyPair.Public, err = hex.DecodeString(cfg.AsymmetricKeys.Public)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym public key decode failed")
 	}
-	oscarKeyPair.Secret, err = hex.DecodeString(conf.AsymmetricKeys.Secret)
+	oscarKeyPair.Secret, err = hex.DecodeString(cfg.AsymmetricKeys.Secret)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym secret key decode failed")
 	}
@@ -84,80 +82,67 @@ func applyConfigFile(confPath string) (*configuration, error) {
 	}
 
 	// Firebase cloud messaging
-	if conf.FCMServerKey == "" {
+	if cfg.FCMServerKey == "" {
 		return nil, errors.New("fcm_server_key is empty/missing")
 	}
-	gFCMServerKey = conf.FCMServerKey
+	gFCMServerKey = cfg.FCMServerKey
 
 	// Apple push notifications
-	if conf.APNS.KeyID == "" {
+	if cfg.APNS.KeyID == "" {
 		return nil, errors.New("apns 'key_id' is empty/missing")
 	}
-	if conf.APNS.P8Path == "" {
+	if cfg.APNS.P8Path == "" {
 		return nil, errors.New("apns 'p8_path' is empty/missing")
 	}
-	if conf.APNS.TeamID == "" {
+	if cfg.APNS.TeamID == "" {
 		return nil, errors.New("apns 'team_id' is empty/missing")
 	}
-	err = createAPNSClient(conf.APNS.P8Path, conf.APNS.KeyID, conf.APNS.TeamID, conf.APNS.Production)
+	err = createAPNSClient(cfg.APNS.P8Path, cfg.APNS.KeyID, cfg.APNS.TeamID, cfg.APNS.Production)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to set up apple push notification service client")
 	}
 
 	// sql database
-	rs, err = mariadb.New(conf.SQLDSN)
-	if err != nil {
-		return nil, err
+	if cfg.SQLDSN == "" {
+		return nil, errors.New("'sql_dsn' is empty/missing")
 	}
 
 	// key-value database
-	kvs, err = boltdb.New(conf.KVDBPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "kv db init failed")
+	if cfg.KVDBPath == "" {
+		return nil, errors.New("'kv_db_path' is empty/missing")
 	}
 
 	// set up our file storage
-	switch conf.FileStorage.Type {
-	case "localdisk":
-		fs, err = localdisk.New(conf.FileStorage.LocalDiskStoragePath)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to init localdisk storage")
-		}
-	case "gcs":
-		fs, err = gcs.New(conf.FileStorage.GCPCredentialsPath, conf.FileStorage.GCPBucketName)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to init google cloud storage")
-		}
-	default:
-		return nil, errors.Errorf("unknown 'file_storage' type: %s", conf.FileStorage.Type)
+	if cfg.FileStorage.Type != "localdisk" && cfg.FileStorage.Type != "gcs" {
+		return nil, errors.Errorf("unknown filestor provider: '%s'", cfg.FileStorage.Type)
 	}
 
 	// TLS info
-	if conf.Port == nil {
+	if cfg.Port == nil {
 		port := 443
-		conf.Port = &port
+		cfg.Port = &port
 	}
 
-	if conf.TLS == nil {
+	if cfg.TLS == nil {
 		tls := true
-		conf.TLS = &tls
+		cfg.TLS = &tls
 	}
-	if *conf.TLS {
+	if *cfg.TLS {
 		// make sure we have a hostname
-		if conf.Hostname == "" {
+		if cfg.Hostname == "" {
 			return nil, errors.New("Hostname is required when TLS is enabled")
 		}
 	}
 
 	// mailgun info
-	if conf.Email.MailgunAPIKey == "" {
+	if cfg.Email.MailgunAPIKey == "" {
 		return nil, errors.New("mailgun api key is missing")
 	}
-	if conf.Email.Domain == "" {
+	if cfg.Email.Domain == "" {
 		return nil, errors.New("email domain is missing")
 	}
-	mailgun.APIKey = conf.Email.MailgunAPIKey
-	mailgun.Domain = conf.Email.Domain
+	mailgun.APIKey = cfg.Email.MailgunAPIKey
+	mailgun.Domain = cfg.Email.Domain
 
-	return &conf, nil
+	return &cfg, nil
 }

@@ -54,7 +54,8 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 		sendBadReqCode(w, "Missing verification token", errorBadRequest)
 	}
 
-	evtr, err := rs.EmailVerificationTokenRecord(body.Token)
+	db := database(r.Context())
+	evtr, err := db.EmailVerificationTokenRecord(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -65,7 +66,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add the email to the user, then delete the verification
-	err = rs.VerifyEmail(evtr.Email, evtr.UserID)
+	err = db.VerifyEmail(evtr.Email, evtr.UserID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -83,7 +84,8 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := rs.DisavowEmail(token)
+	db := database(r.Context())
+	err := db.DisavowEmail(token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

@@ -19,7 +19,7 @@ func serverInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	info := map[string]interface{}{
 		"build_time": ServerBuildTime,
-		"sys_kb":     ms.Sys / 1024,
+		"sys_bytes":  ms.HeapAlloc,
 	}
 
 	sendSuccess(w, info)

@@ -1,5 +1,10 @@
 package main
 
-type contextKey int
+type contextKey string
 
-const contextUserIDKey contextKey = 0
+const (
+	contextUserIDKey                    = contextKey("user_id")
+	contextFileStorageProviderKey       = contextKey("file_storage_provider")
+	contextKeyValueProviderKey          = contextKey("key_value_provider")
+	contextRelationalStorageProviderKey = contextKey("relational_storage_provider")
+)

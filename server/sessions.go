@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"zood.xyz/oscar/encodable"
+	"zood.xyz/oscar/relstor"
 	"zood.xyz/oscar/sodium"
 )
 
@@ -89,7 +90,8 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// get the user's public key
-		userID, pubKey, err := rs.LimitedUserInfo(st.Name)
+		db := database(r.Context())
+		userID, pubKey, err := db.LimitedUserInfo(st.Name)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -123,7 +125,7 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func verifyAccessToken(token string) (int64, error) {
+func verifyAccessToken(db relstor.Provider, token string) (int64, error) {
 	if token == "" {
 		return 0, nil
 	}
@@ -155,7 +157,7 @@ func verifyAccessToken(token string) (int64, error) {
 	}
 
 	// get the user's public key
-	userID, pubKey, err := rs.LimitedUserInfo(st.Name)
+	userID, pubKey, err := db.LimitedUserInfo(st.Name)
 	if err != nil {
 		return 0, err
 	}
@@ -187,7 +189,8 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username = strings.ToLower(username)
 
 	// find the user
-	userRec, err := rs.User(username)
+	db := database(r.Context())
+	userRec, err := db.User(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -212,7 +215,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	crand.Read(challenge)
 
 	// delete any existing challenge for this user
-	err = rs.DeleteSessionChallengeUser(userRec.ID)
+	err = db.DeleteSessionChallengeUser(userRec.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -220,7 +223,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	creationDate := time.Now().Unix()
 
-	err = rs.InsertSessionChallenge(userRec.ID, creationDate, challenge)
+	err = db.InsertSessionChallenge(userRec.ID, creationDate, challenge)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -250,7 +253,8 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username := vars["username"]
 	username = strings.ToLower(username)
 
-	user, err := rs.User(username)
+	db := database(r.Context())
+	user, err := db.User(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -261,7 +265,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// find the challenge for this user
-	challenge, err := rs.SessionChallenge(user.ID)
+	challenge, err := db.SessionChallenge(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -274,7 +278,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	// if the challenge was created most than 2 minutes ago, then consider it expired
 	if (time.Now().Unix() - challenge.CreationDate) > 120 {
 		sendBadReqCode(w, "challenge expired", errorChallengeExpired)
-		go rs.DeleteSessionChallengeID(challenge.ID)
+		go db.DeleteSessionChallengeID(challenge.ID)
 		return
 	}
 
@@ -328,6 +332,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := append(tokenNonce, tokenCT...)
 	accessTokenB64 := base64.StdEncoding.EncodeToString(accessToken)
 
+	kvs := keyValueStorage(r.Context())
 	pubID, err := kvs.PublicIDFromUserID(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -340,5 +345,5 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		WrappedSymmetricKey:      user.WrappedSymmetricKey,
 		WrappedSymmetricKeyNonce: user.WrappedSymmetricKeyNonce})
 
-	go rs.DeleteSessionChallengeID(challenge.ID)
+	go db.DeleteSessionChallengeID(challenge.ID)
 }

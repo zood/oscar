@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
+	"zood.xyz/oscar/relstor"
 )
 
 var gAPNSP8Path string
@@ -61,14 +62,15 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	atr, err := rs.APNSToken(body.Token)
+	db := database(r.Context())
+	atr, err := db.APNSToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 	if atr == nil {
 		// insert the token, then return
-		err = rs.InsertAPNSToken(userID, body.Token)
+		err = db.InsertAPNSToken(userID, body.Token)
 		if err != nil {
 			sendInternalErr(w, err)
 		}
@@ -85,7 +87,7 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = rs.UpdateUserIDOfAPNSToken(userID, body.Token)
+	err = db.UpdateUserIDOfAPNSToken(userID, body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -98,7 +100,8 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := mux.Vars(r)["token"]
 
-	err := rs.DeleteAPNSTokenOfUser(userID, token)
+	db := database(r.Context())
+	err := db.DeleteAPNSTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -107,8 +110,8 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
-	tokens, err := rs.APNSTokensRaw(userID)
+func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}, urgent bool) {
+	tokens, err := db.APNSTokensRaw(userID)
 	if err != nil {
 		logErr(err)
 		return
@@ -142,7 +145,7 @@ func sendAPNSMessage(userID int64, payload interface{}, urgent bool) {
 		if !resp.Sent() {
 			if resp.Reason == apns2.ReasonUnregistered {
 				// remove the token
-				err = rs.DeleteAPNSToken(t)
+				err = db.DeleteAPNSToken(t)
 				if err != nil {
 					logErr(err)
 				}

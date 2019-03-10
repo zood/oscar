@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/internal/pubsub"
+	"zood.xyz/oscar/kvstor"
 )
 
 const dropBoxIDSize = 16
@@ -38,6 +39,7 @@ type subscriptionReader struct {
 type packageListener struct {
 	closed    chan bool
 	conn      *websocket.Conn
+	kvs       kvstor.Provider
 	pkgs      chan []byte
 	subs      map[string]subscriptionReader
 	waitGroup sync.WaitGroup
@@ -135,7 +137,7 @@ func (pl *packageListener) watch(boxID []byte) {
 	pl.subs[hexID] = sr
 
 	// if there's already a package in the dropbox, send it
-	tmp, err := kvs.PickUpPackage(boxID)
+	tmp, err := pl.kvs.PickUpPackage(boxID)
 	if err != nil {
 		logErr(err)
 	}
@@ -174,10 +176,11 @@ func (pl *packageListener) write() {
 	}
 }
 
-func newPackageListener(conn *websocket.Conn) *packageListener {
+func newPackageListener(conn *websocket.Conn, kvs kvstor.Provider) *packageListener {
 	return &packageListener{
 		closed: make(chan bool),
 		conn:   conn,
+		kvs:    kvs,
 		pkgs:   make(chan []byte),
 		subs:   make(map[string]subscriptionReader),
 	}
@@ -209,6 +212,7 @@ func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	kvs := keyValueStorage(r.Context())
 	pkg, err := kvs.PickUpPackage(boxID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -263,8 +267,10 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		log.Printf("drop_multiple_packages: %s => %s", rs.Username(userID), boxes)
+		db := database(r.Context())
+		log.Printf("drop_multiple_packages: %s => %s", db.Username(userID), boxes)
 	}
+	kvs := keyValueStorage(r.Context())
 	for hexBoxID, pkg := range pkgs {
 		boxID, _ := hex.DecodeString(hexBoxID)
 		err := kvs.DropPackage(pkg, boxID)
@@ -292,7 +298,8 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		log.Printf("%s dropping pkg to %s", rs.Username(userID), hexBoxID)
+		db := database(r.Context())
+		log.Printf("%s dropping pkg to %s", db.Username(userID), hexBoxID)
 	}
 
 	if shouldLogDebug() {
@@ -309,6 +316,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: about to update the bucket")
 	}
+	kvs := keyValueStorage(r.Context())
 	err = kvs.DropPackage(pkg, boxID)
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: bucket update error? %v", err)
@@ -347,6 +355,7 @@ func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pl := newPackageListener(conn)
+	kvs := keyValueStorage(r.Context())
+	pl := newPackageListener(conn, kvs)
 	pl.start()
 }
