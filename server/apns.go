@@ -127,7 +127,7 @@ func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}, urg
 		priority = 5
 	}
 	n := &apns2.Notification{
-		Topic:    "io.pijun.michael",
+		Topic:    "xyz.zood.michael",
 		Priority: priority,
 	}
 	ap := apsPayload{}
