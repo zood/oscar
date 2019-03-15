@@ -16,18 +16,18 @@ const welcomeEmailTemplate = `Hi,
 Thanks for signing up for Zood Location.
 
 To verify your email address, click the link below:
-https://emails.zood.xyz/verify-email?t={{.Token}}
+https://www.zood.xyz/verify-email?t={{.Token}}
 
-We hope you enjoy using Zood Location as much we enjoyed creating it.
+I hope you enjoy using Zood Location as much as I enjoyed creating it. If you have any comments, questions or suggestions you can reply directly to this email.
 
 Best,
-The Zood Location Team
+Arash
 
-If you didn't sign up for Zood Location, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. You can click the link below to remove your email address from this account:
-https://emails.zood.xyz/disavow-email?t={{.Token}}
+If you didn't sign up for Zood Location, sorry for the inconvenience. Somebody signed up and mistakenly used your email address. You can click the link below to dissociate your email address from this account:
+https://www.zood.xyz/disavow-email?t={{.Token}}
 `
 
-const notificationsEmailAddress = "Zood Location <noreply@notifications.zood.xyz>"
+const notificationsEmailAddress = "Zood Location <email-verification@notifications.zood.xyz>"
 
 func sendVerificationEmail(token, email string) error {
 	tmpl, err := template.New("").Parse(welcomeEmailTemplate)
