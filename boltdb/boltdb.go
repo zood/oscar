@@ -2,6 +2,10 @@ package boltdb
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"zood.xyz/oscar/kvstor"
@@ -46,6 +50,16 @@ func New(dbPath string) (kvstor.Provider, error) {
 	}
 
 	return boltdbProvider{db: db}, nil
+}
+
+// Temp returns a new database backed by a file in the system temp directory
+func Temp(t *testing.T) kvstor.Provider {
+	file := filepath.Join(os.TempDir(), fmt.Sprintf("bolt%d.db", time.Now().UnixNano()))
+	db, err := New(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
 }
 
 func (bdp boltdbProvider) DropPackage(pkg []byte, boxID []byte) error {

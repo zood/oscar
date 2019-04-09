@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"html/template"
 	"net/http"
 
-	"zood.xyz/oscar/mailgun"
+	"zood.xyz/oscar/smtp"
 
 	"github.com/gorilla/mux"
 )
@@ -29,14 +30,14 @@ https://www.zood.xyz/disavow-email?t={{.Token}}
 
 const notificationsEmailAddress = "Zood Location <email-verification@notifications.zood.xyz>"
 
-func sendVerificationEmail(token, email string) error {
+func sendVerificationEmail(token, email string, sendEmail smtp.SendEmailFunc) error {
 	tmpl, err := template.New("").Parse(welcomeEmailTemplate)
 	if err != nil {
 		return err
 	}
 	buf := &bytes.Buffer{}
 	tmpl.Execute(buf, struct{ Token string }{Token: token})
-	return mailgun.SendEmail(notificationsEmailAddress, email, "Zood Location: Email Verification", buf.String(), nil)
+	return sendEmail(notificationsEmailAddress, email, "Zood Location: Email Verification", buf.String(), nil)
 }
 
 // verifyEmailHandler handles POST /email-verifications
@@ -92,4 +93,15 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(w, nil)
+}
+
+func sendEmailFuncContext(ctx context.Context) smtp.SendEmailFunc {
+	return ctx.Value(contextSendEmailerKey).(smtp.SendEmailFunc)
+}
+
+func sendEmailFuncInjector(sendEmail smtp.SendEmailFunc, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), contextSendEmailerKey, sendEmail)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
 }

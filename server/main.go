@@ -11,6 +11,7 @@ import (
 
 	"zood.xyz/oscar/boltdb"
 	"zood.xyz/oscar/filestor"
+	"zood.xyz/oscar/mailgun"
 	"zood.xyz/oscar/sqlite"
 
 	"zood.xyz/oscar/gcs"
@@ -108,7 +109,7 @@ func main() {
 		m := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist(config.Hostname),
-			Cache:      autocert.DirCache("./"),
+			Cache:      autocert.DirCache(config.AutocertDirCache),
 		}
 		tlsConfig.GetCertificate = m.GetCertificate
 		server.TLSConfig = tlsConfig
@@ -121,7 +122,7 @@ func main() {
 
 func installEndPoints(r *mux.Router) {
 	r.Handle("/users", sessionHandler(searchUsersHandler)).Methods("GET")
-	r.HandleFunc("/users", createUserHandler).Methods("POST")
+	r.HandleFunc("/users", sendEmailFuncInjector(mailgun.SendEmail, createUserHandler)).Methods("POST")
 	r.Handle("/users/me/apns-tokens", sessionHandler(addAPNSTokenHandler)).Methods(http.MethodPost)
 	r.Handle("/users/me/apns-tokens/{token}", sessionHandler(deleteAPNSTokenHandler)).Methods(http.MethodDelete)
 	r.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods("POST")

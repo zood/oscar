@@ -13,6 +13,7 @@ import (
 	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/kvstor"
 	"zood.xyz/oscar/relstor"
+	"zood.xyz/oscar/smtp"
 	"zood.xyz/oscar/sodium"
 
 	"github.com/gorilla/mux"
@@ -72,7 +73,8 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubID, sErr := createUser(database(r.Context()), keyValueStorage(r.Context()), user)
+	ctx := r.Context()
+	pubID, sErr := createUser(database(ctx), keyValueStorage(ctx), sendEmailFuncContext(ctx), user)
 	if sErr != nil {
 		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
@@ -87,16 +89,17 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}{ID: pubID})
 }
 
-func createUser(db relstor.Provider, kvs kvstor.Provider, user User) ([]byte, *serverError) {
+func createUser(db relstor.Provider, kvs kvstor.Provider, sendEmail smtp.SendEmailFunc, user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
 	}
+	user.Username = strings.ToLower(user.Username)
 	if len(user.Username) > 32 {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username must be less than 33 characters."}
 	}
 	if !validUsernamePattern.MatchString(user.Username) {
-		return nil, &serverError{code: errorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain letters (a-z) or numbers (0-9)."}
+		return nil, &serverError{code: errorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain lowercase letters (a-z) or numbers (0-9)."}
 	}
 	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: errorInvalidPasswordSalt, message: "Invalid password salt"}
@@ -222,7 +225,7 @@ func createUser(db relstor.Provider, kvs kvstor.Provider, user User) ([]byte, *s
 
 	if emailVerificationToken != nil {
 		go func() {
-			err = sendVerificationEmail(*emailVerificationToken, user.Email)
+			err = sendVerificationEmail(*emailVerificationToken, user.Email, sendEmail)
 			if err != nil {
 				logErr(err)
 			}

@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"zood.xyz/oscar/mailgun"
@@ -23,7 +22,8 @@ type serverConfig struct {
 		Public string `json:"public"`
 		Secret string `json:"secret"`
 	} `json:"asymmetric_keys"`
-	Email struct {
+	AutocertDirCache string `json:"autocert_dir_cache"`
+	Email            struct {
 		MailgunAPIKey string `json:"mailgun_api_key"`
 		Domain        string `json:"domain"`
 	} `json:"email"`
@@ -62,7 +62,11 @@ func applyConfigFile(confPath string) (*serverConfig, error) {
 		return nil, errors.Wrap(err, "sym key decode failed")
 	}
 	if len(oscarSymKey) != sodium.SymmetricKeySize {
-		return nil, fmt.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), sodium.SymmetricKeySize)
+		return nil, errors.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), sodium.SymmetricKeySize)
+	}
+
+	if cfg.AutocertDirCache == "" {
+		return nil, errors.New("'autocert_dir_cache' field is missing")
 	}
 
 	// public/private keys
@@ -75,10 +79,10 @@ func applyConfigFile(confPath string) (*serverConfig, error) {
 		return nil, errors.Wrap(err, "asym secret key decode failed")
 	}
 	if len(oscarKeyPair.Public) != sodium.PublicKeySize {
-		return nil, fmt.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.Public), sodium.PublicKeySize)
+		return nil, errors.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.Public), sodium.PublicKeySize)
 	}
 	if len(oscarKeyPair.Secret) != sodium.SecretKeySize {
-		return nil, fmt.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.Secret), sodium.SecretKeySize)
+		return nil, errors.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.Secret), sodium.SecretKeySize)
 	}
 
 	// Firebase cloud messaging
