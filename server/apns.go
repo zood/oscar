@@ -143,7 +143,7 @@ func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}, urg
 			continue
 		}
 		if !resp.Sent() {
-			if resp.Reason == apns2.ReasonUnregistered {
+			if resp.Reason == apns2.ReasonUnregistered || resp.Reason == apns2.ReasonBadDeviceToken {
 				// remove the token
 				err = db.DeleteAPNSToken(t)
 				if err != nil {
