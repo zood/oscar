@@ -143,7 +143,7 @@ func installEndPoints(r *mux.Router) {
 	r.Handle("/drop-boxes/{box_id}", sessionHandler(pickUpPackageHandler)).Methods("GET")
 	r.Handle("/drop-boxes/{box_id}", sessionHandler(dropPackageHandler)).Methods("PUT")
 
-	r.HandleFunc("/public-key", getServerPublicKeyHandler).Methods("GET")
+	r.HandleFunc("/public-key", corsHandler(getServerPublicKeyHandler)).Methods("GET")
 
 	r.Handle("/sessions/{username}/challenge", corsHandler(createAuthChallengeHandler)).Methods("POST")
 	r.Handle("/sessions/{username}/challenge-response", corsHandler(finishAuthChallengeHandler)).Methods("POST")
