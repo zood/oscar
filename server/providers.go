@@ -10,12 +10,14 @@ import (
 	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
 	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
 )
 
 type serverProviders struct {
 	db      relstor.Provider
+	emailer smtp.SendEmailer
 	fs      filestor.Provider
 	kvs     kvstor.Provider
 	symKey  []byte
@@ -36,6 +38,7 @@ func createTestProviders(t *testing.T) *serverProviders {
 	}
 	return &serverProviders{
 		db:      db,
+		emailer: smtp.NewMockSendEmailer(),
 		kvs:     kvs,
 		symKey:  symKey,
 		keyPair: keyPair,
@@ -49,11 +52,6 @@ func providersCtx(ctx context.Context) *serverProviders {
 func providersInjector(p *serverProviders, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), contextServerProvidersKey, p)
-		// -- BEGIN TEMP --
-		// ctx = context.WithValue(r.Context(), contextFileStorageProviderKey, p.fs)
-		// ctx = context.WithValue(ctx, contextRelationalStorageProviderKey, p.db)
-		// ctx = context.WithValue(ctx, contextKeyValueProviderKey, p.kvs)
-		// -- END TEMP --
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

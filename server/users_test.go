@@ -40,7 +40,7 @@ func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPai
 		WrappedSymmetricKey:         []byte("wrapped-symmetric-key"),
 		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
 	}
-	pubID, sErr := createUser(providers.db, providers.kvs, smtp.MockSendEmailFunc(), user)
+	pubID, sErr := createUser(providers.db, providers.kvs, smtp.NewMockSendEmailer(), user)
 	if sErr != nil {
 		t.Fatal(sErr)
 	}
@@ -72,14 +72,9 @@ func TestCreateUserNoEmail(t *testing.T) {
 	user.WrappedSymmetricKey = []byte("wrapped-symmetric-key")
 	user.WrappedSymmetricKeyNonce = []byte("wrapped-symmetric-key-nonce")
 
-	emailWasSent := false
-	var sendEmail smtp.SendEmailFunc
-	sendEmail = func(from string, to string, subj string, textMsg string, htmlMsg *string) error {
-		emailWasSent = true
-		return nil
-	}
+	emailer := smtp.NewMockSendEmailer()
 
-	pubID, serr := createUser(db, kvs, sendEmail, user)
+	pubID, serr := createUser(db, kvs, emailer, user)
 	if serr != nil {
 		t.Fatal(serr)
 	}
@@ -88,7 +83,7 @@ func TestCreateUserNoEmail(t *testing.T) {
 	}
 	// sleep for 50ms to see if the goroutine tries to send an email
 	time.Sleep(50 * time.Millisecond)
-	if emailWasSent {
+	if emailer.SentEmail {
 		t.Fatal("An email should not have been sent. No address was provided")
 	}
 	// make sure the user exists in the db
@@ -130,14 +125,9 @@ func TestCreateUserWithEmail(t *testing.T) {
 	user.WrappedSymmetricKey = []byte("wrapped-symmetric-key")
 	user.WrappedSymmetricKeyNonce = []byte("wrapped-symmetric-key-nonce")
 
-	emailWasSent := false
-	var sendEmail smtp.SendEmailFunc
-	sendEmail = func(from string, to string, subj string, textMsg string, htmlMsg *string) error {
-		emailWasSent = true
-		return nil
-	}
+	emailer := smtp.NewMockSendEmailer()
 
-	pubID, serr := createUser(db, kvs, sendEmail, user)
+	pubID, serr := createUser(db, kvs, emailer, user)
 	if serr != nil {
 		t.Fatal(serr)
 	}
@@ -146,7 +136,7 @@ func TestCreateUserWithEmail(t *testing.T) {
 	}
 	// sleep for 50ms to allow the goroutine to send the email
 	time.Sleep(50 * time.Millisecond)
-	if !emailWasSent {
+	if !emailer.SentEmail {
 		t.Fatal("An email should have been sent")
 	}
 
@@ -168,6 +158,7 @@ func TestCreateUserWithEmail(t *testing.T) {
 }
 
 func TestCreateUserHandler(t *testing.T) {
+	providers := createTestProviders(t)
 	user := User{Username: "Arash"}
 	salt := make([]byte, sodium.PasswordStretchingSaltSize)
 	sodium.Random(salt)
@@ -183,20 +174,9 @@ func TestCreateUserHandler(t *testing.T) {
 	user.WrappedSymmetricKey = []byte("wrapped-symmetric-key")
 	user.WrappedSymmetricKeyNonce = []byte("wrapped-symmetric-key-nonce")
 
-	db, _ := sqlite.New(sqlite.InMemoryDSN)
-	kvs := boltdb.Temp(t)
-	var sendEmail smtp.SendEmailFunc = func(from string, to string, subj string, textMsg string, htmlMsg *string) error {
-		return nil
-	}
-
 	data, _ := json.Marshal(user)
 	r := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(data))
-	providers := &serverProviders{
-		db:  db,
-		kvs: kvs,
-	}
 	ctx := context.WithValue(r.Context(), contextServerProvidersKey, providers)
-	ctx = context.WithValue(ctx, contextSendEmailerKey, sendEmail)
 	r = r.WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -215,14 +195,14 @@ func TestCreateUserHandler(t *testing.T) {
 		t.Fatalf("user id is the wrong size (%d). Got %s", len(resp.ID), hex.EncodeToString(resp.ID))
 	}
 
-	arash, err := db.User(strings.ToLower(user.Username))
+	arash, err := providers.db.User(strings.ToLower(user.Username))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if arash == nil {
 		t.Fatal("user not found")
 	}
-	uid, err := kvs.UserIDFromPublicID(resp.ID)
+	uid, err := providers.kvs.UserIDFromPublicID(resp.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

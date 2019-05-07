@@ -77,12 +77,15 @@ func main() {
 		log.Fatalf("Unknown filestor type: '%s'", config.FileStorage.Type)
 	}
 
+	emailer := mailgun.New(config.Email.MailgunAPIKey, config.Email.Domain)
+
 	// playground()
 	providers := &serverProviders{
-		db:     rs,
-		fs:     fs,
-		kvs:    kvs,
-		symKey: config.SymmetricKey,
+		db:      rs,
+		emailer: emailer,
+		fs:      fs,
+		kvs:     kvs,
+		symKey:  config.SymmetricKey,
 		keyPair: sodium.KeyPair{
 			Public: config.AsymmetricKeys.Public,
 			Secret: config.AsymmetricKeys.Secret,
@@ -132,7 +135,7 @@ func newOscarRouter(p *serverProviders) http.HandlerFunc {
 	v1 := r.PathPrefix("/1").Subrouter()
 
 	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods("GET")
-	v1.HandleFunc("/users", sendEmailFuncInjector(mailgun.SendEmail, createUserHandler)).Methods("POST")
+	v1.HandleFunc("/users", createUserHandler).Methods(http.MethodPost)
 	v1.Handle("/users/me/apns-tokens", sessionHandler(addAPNSTokenHandler)).Methods(http.MethodPost)
 	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(deleteAPNSTokenHandler)).Methods(http.MethodDelete)
 	v1.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods("POST")

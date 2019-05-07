@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 
-	"zood.dev/oscar/mailgun"
 	"zood.dev/oscar/sodium"
 
 	"github.com/pkg/errors"
@@ -148,8 +147,6 @@ func loadConfig(confPath string) (*serverConfig, error) {
 	if cfg.Email.Domain == "" {
 		return nil, errors.New("email domain is missing")
 	}
-	mailgun.APIKey = cfg.Email.MailgunAPIKey
-	mailgun.Domain = cfg.Email.Domain
 
 	return &cfg, nil
 }

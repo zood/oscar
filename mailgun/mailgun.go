@@ -1,38 +1,30 @@
 package mailgun
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"zood.dev/oscar/smtp"
 )
 
-// APIKey is the secret string used for authentication with the mailgun api
-var APIKey string
+type mailgun struct {
+	apiKey   string
+	domain   string
+	testMode bool
+}
 
-// Domain is the domain from which your email will be sent
-var Domain string
-
-// TestMode determines whether messages will actually be sent by the API
-var TestMode = false
-
-// Errors that are returned by this mailgun api
-var (
-	ErrAPIKeyNotSet = errors.New("the mailgun api key has not been set")
-	ErrDomainNotSet = errors.New("the sending domain has not been set")
-)
-
-// SendEmail sends an email message
-func SendEmail(from string, to string, subj string, textMsg string, htmlMsg *string) error {
-	if APIKey == "" {
-		return ErrAPIKeyNotSet
+// New returns a smtp.SendEmailer backed by mailgun
+func New(apiKey, domain string) smtp.SendEmailer {
+	return &mailgun{
+		apiKey: apiKey,
+		domain: domain,
 	}
-	if Domain == "" {
-		return ErrDomainNotSet
-	}
+}
 
+func (mg *mailgun) SendEmail(from string, to string, subj string, textMsg string, htmlMsg *string) error {
 	vals := url.Values{}
 	vals.Set("from", from)
 	vals.Set("to", to)
@@ -41,16 +33,16 @@ func SendEmail(from string, to string, subj string, textMsg string, htmlMsg *str
 	if htmlMsg != nil {
 		vals.Set("html", *htmlMsg)
 	}
-	if TestMode {
+	if mg.testMode {
 		vals.Set("o:testmode", "true")
 	}
 
 	req, _ := http.NewRequest(
-		"POST",
-		fmt.Sprintf("https://api.mailgun.net/v3/%s/messages", Domain),
+		http.MethodPost,
+		fmt.Sprintf("https://api.mailgun.net/v3/%s/messages", mg.domain),
 		strings.NewReader(vals.Encode()))
 	req.Header.Set("content-type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("api", APIKey)
+	req.SetBasicAuth("api", mg.apiKey)
 	client := http.Client{}
 
 	resp, err := client.Do(req)

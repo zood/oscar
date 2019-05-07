@@ -75,7 +75,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	providers := providersCtx(ctx)
-	pubID, sErr := createUser(providers.db, providers.kvs, sendEmailFuncContext(ctx), user)
+	pubID, sErr := createUser(providers.db, providers.kvs, providers.emailer, user)
 	if sErr != nil {
 		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
@@ -90,7 +90,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}{ID: pubID})
 }
 
-func createUser(db relstor.Provider, kvs kvstor.Provider, sendEmail smtp.SendEmailFunc, user User) ([]byte, *serverError) {
+func createUser(db relstor.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer, user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
@@ -226,7 +226,7 @@ func createUser(db relstor.Provider, kvs kvstor.Provider, sendEmail smtp.SendEma
 
 	if emailVerificationToken != nil {
 		go func() {
-			err = sendVerificationEmail(*emailVerificationToken, user.Email, sendEmail)
+			err = sendVerificationEmail(*emailVerificationToken, user.Email, emailer)
 			if err != nil {
 				logErr(err)
 			}
