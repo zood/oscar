@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"zood.xyz/oscar/relstor"
+	"zood.dev/oscar/relstor"
 )
 
 var gFCMServerKey string

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/sodium"
 )
 
 const dropBoxIDSize = 16

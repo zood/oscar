@@ -7,7 +7,7 @@ import (
 	"html/template"
 	"net/http"
 
-	"zood.xyz/oscar/smtp"
+	"zood.dev/oscar/smtp"
 
 	"github.com/gorilla/mux"
 )

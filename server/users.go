@@ -9,12 +9,12 @@ import (
 	"regexp"
 	"strings"
 
-	"zood.xyz/oscar/base62"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/kvstor"
-	"zood.xyz/oscar/relstor"
-	"zood.xyz/oscar/smtp"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/base62"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/kvstor"
+	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/smtp"
+	"zood.dev/oscar/sodium"
 
 	"github.com/gorilla/mux"
 )

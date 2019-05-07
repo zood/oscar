@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"zood.xyz/oscar/encodable"
+	"zood.dev/oscar/encodable"
 )
 
 // currLogLevel holds the current log detail desired

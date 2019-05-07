@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/encodable"
+	"zood.dev/oscar/encodable"
 )
 
 type outboundMessage struct {

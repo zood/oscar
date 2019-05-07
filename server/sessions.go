@@ -13,10 +13,10 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"zood.xyz/oscar/base62"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/relstor"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/base62"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/sodium"
 )
 
 type sessionChallenge struct {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/filestor"
+	"zood.dev/oscar/filestor"
 )
 
 var testDir string

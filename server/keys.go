@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"zood.xyz/oscar/encodable"
+	"zood.dev/oscar/encodable"
 )
 
 func getServerPublicKeyHandler(w http.ResponseWriter, r *http.Request) {

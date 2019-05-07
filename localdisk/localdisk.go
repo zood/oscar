@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"zood.xyz/oscar/filestor"
+	"zood.dev/oscar/filestor"
 )
 
 // localDiskProvider satisifies the filestor.Provider interface

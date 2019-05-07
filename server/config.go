@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"os"
 
-	"zood.xyz/oscar/mailgun"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/mailgun"
+	"zood.dev/oscar/sodium"
 
 	"github.com/pkg/errors"
 )

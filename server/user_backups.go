@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"zood.xyz/oscar/filestor"
+	"zood.dev/oscar/filestor"
 )
 
 // const userDBsBucketName = "db_backups"

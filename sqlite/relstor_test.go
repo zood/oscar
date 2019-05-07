@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/relstor"
+	"zood.dev/oscar/relstor"
 )
 
 var sqldb relstor.Provider

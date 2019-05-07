@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
-	"zood.xyz/oscar/relstor"
+	"zood.dev/oscar/relstor"
 )
 
 var gAPNSP8Path string

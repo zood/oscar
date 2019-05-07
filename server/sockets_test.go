@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/websocket"
-	"zood.xyz/oscar/base62"
+	"zood.dev/oscar/base62"
 )
 
 func TestCreateSocketHandler(t *testing.T) {

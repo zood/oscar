@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/sodium"
 )
 
 type authenticationChallenge struct {

@@ -11,9 +11,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/internal/pubsub"
-	"zood.xyz/oscar/kvstor"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/internal/pubsub"
+	"zood.dev/oscar/kvstor"
 )
 
 const dropBoxIDSize = 16

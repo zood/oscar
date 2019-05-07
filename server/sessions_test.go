@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/sodium"
-	"zood.xyz/oscar/sqlite"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 )
 
 func loginTestUser(t *testing.T, providers *serverProviders, user User, userKeyPair sodium.KeyPair) (accessToken string) {

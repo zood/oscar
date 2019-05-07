@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
-	"zood.xyz/oscar/internal/pubsub"
-	"zood.xyz/oscar/kvstor"
+	"zood.dev/oscar/internal/pubsub"
+	"zood.dev/oscar/kvstor"
 )
 
 const (

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/base62"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/smtp"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/base62"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/smtp"
+	"zood.dev/oscar/sodium"
 
-	"zood.xyz/oscar/boltdb"
-	"zood.xyz/oscar/sqlite"
+	"zood.dev/oscar/boltdb"
+	"zood.dev/oscar/sqlite"
 )
 
 func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPair sodium.KeyPair) {

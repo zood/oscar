@@ -10,7 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // because, duh
 	"github.com/pkg/errors"
-	"zood.xyz/oscar/relstor"
+	"zood.dev/oscar/relstor"
 )
 
 // InMemoryDSN creates a temporary in-memory only database when used as a DSN

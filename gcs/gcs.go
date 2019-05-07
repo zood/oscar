@@ -7,7 +7,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
-	"zood.xyz/oscar/filestor"
+	"zood.dev/oscar/filestor"
 )
 
 type gcsProvider struct {

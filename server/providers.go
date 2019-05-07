@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"testing"
 
-	"zood.xyz/oscar/boltdb"
-	"zood.xyz/oscar/filestor"
-	"zood.xyz/oscar/kvstor"
-	"zood.xyz/oscar/relstor"
-	"zood.xyz/oscar/sodium"
-	"zood.xyz/oscar/sqlite"
+	"zood.dev/oscar/boltdb"
+	"zood.dev/oscar/filestor"
+	"zood.dev/oscar/kvstor"
+	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 )
 
 type serverProviders struct {

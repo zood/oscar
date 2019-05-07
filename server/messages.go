@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/relstor"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/relstor"
 )
 
 // Message ...

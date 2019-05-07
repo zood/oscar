@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"zood.xyz/oscar/kvstor"
+	"zood.dev/oscar/kvstor"
 )
 
 var userIDsBucketName = []byte("user_ids")

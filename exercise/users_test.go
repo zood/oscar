@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"zood.xyz/oscar/base62"
-	"zood.xyz/oscar/encodable"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/base62"
+	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/sodium"
 )
 
 type testUser struct {

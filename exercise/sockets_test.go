@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"zood.xyz/oscar/encodable"
+	"zood.dev/oscar/encodable"
 
 	"github.com/gorilla/websocket"
-	"zood.xyz/oscar/sodium"
+	"zood.dev/oscar/sodium"
 )
 
 const (

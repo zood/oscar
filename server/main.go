@@ -9,14 +9,14 @@ import (
 	"net/http"
 	"time"
 
-	"zood.xyz/oscar/boltdb"
-	"zood.xyz/oscar/filestor"
-	"zood.xyz/oscar/mailgun"
-	"zood.xyz/oscar/sodium"
-	"zood.xyz/oscar/sqlite"
+	"zood.dev/oscar/boltdb"
+	"zood.dev/oscar/filestor"
+	"zood.dev/oscar/mailgun"
+	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 
-	"zood.xyz/oscar/gcs"
-	"zood.xyz/oscar/localdisk"
+	"zood.dev/oscar/gcs"
+	"zood.dev/oscar/localdisk"
 
 	"golang.org/x/crypto/acme/autocert"
 
