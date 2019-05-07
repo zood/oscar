@@ -50,7 +50,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 
-	kvs := keyValueStorage(r.Context())
+	kvs := providersCtx(r.Context()).kvs
 	id, err := kvs.UserIDFromPublicID(pubID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -74,7 +74,8 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	pubID, sErr := createUser(database(ctx), keyValueStorage(ctx), sendEmailFuncContext(ctx), user)
+	providers := providersCtx(ctx)
+	pubID, sErr := createUser(providers.db, providers.kvs, sendEmailFuncContext(ctx), user)
 	if sErr != nil {
 		if sErr.code == errorInternal {
 			sendInternalErr(w, err)
@@ -242,7 +243,7 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	pubKey, err := db.UserPublicKey(userID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -264,7 +265,8 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	user := User{}
 	var err error
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	user.ID, user.PublicKey, err = db.LimitedUserInfo(username)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -276,7 +278,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Username = username
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	user.PublicID, err = kvs.PublicIDFromUserID(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -291,7 +293,7 @@ func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	username, pubKey, err := db.LimitedUserInfoID(userID)
 	if err != nil {
 		sendInternalErr(w, err)

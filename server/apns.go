@@ -62,7 +62,7 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	atr, err := db.APNSToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -100,7 +100,7 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := mux.Vars(r)["token"]
 
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	err := db.DeleteAPNSTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)

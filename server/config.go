@@ -19,8 +19,10 @@ type serverConfig struct {
 		TeamID     string `json:"team_id"`
 	} `json:"apns"`
 	AsymmetricKeys struct {
-		Public string `json:"public"`
-		Secret string `json:"secret"`
+		PublicHex string `json:"public"`
+		Public    []byte `json:"-"`
+		SecretHex string `json:"secret"`
+		Secret    []byte `json:"-"`
 	} `json:"asymmetric_keys"`
 	AutocertDirCache string `json:"autocert_dir_cache"`
 	Email            struct {
@@ -33,18 +35,19 @@ type serverConfig struct {
 		GCPCredentialsPath   string `json:"gcp_credentials_path"`
 		LocalDiskStoragePath string `json:"local_disk_storage_path"`
 	} `json:"file_storage"`
-	FCMServerKey string `json:"fcm_server_key"`
-	Hostname     string `json:"hostname"`
-	KVDBPath     string `json:"kv_db_path"`
-	Port         *int   `json:"port,omitempty"`
-	SQLDSN       string `json:"sql_dsn"`
-	SymmetricKey string `json:"symmetric_key"`
-	TLS          *bool  `json:"tls,omitempty"`
+	FCMServerKey    string `json:"fcm_server_key"`
+	Hostname        string `json:"hostname"`
+	KVDBPath        string `json:"kv_db_path"`
+	Port            *int   `json:"port,omitempty"`
+	SQLDSN          string `json:"sql_dsn"`
+	SymmetricKey    []byte `json:"-"`
+	SymmetricKeyHex string `json:"symmetric_key"`
+	TLS             *bool  `json:"tls,omitempty"`
 }
 
-var config *serverConfig
+// var config *serverConfig
 
-func applyConfigFile(confPath string) (*serverConfig, error) {
+func loadConfig(confPath string) (*serverConfig, error) {
 	f, err := os.Open(confPath)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open config file")
@@ -57,12 +60,12 @@ func applyConfigFile(confPath string) (*serverConfig, error) {
 	}
 
 	// symmetric key
-	oscarSymKey, err = hex.DecodeString(cfg.SymmetricKey)
+	cfg.SymmetricKey, err = hex.DecodeString(cfg.SymmetricKeyHex)
 	if err != nil {
 		return nil, errors.Wrap(err, "sym key decode failed")
 	}
-	if len(oscarSymKey) != sodium.SymmetricKeySize {
-		return nil, errors.Errorf("invalid sym key size (%d); should be %d bytes", len(oscarSymKey), sodium.SymmetricKeySize)
+	if len(cfg.SymmetricKey) != sodium.SymmetricKeySize {
+		return nil, errors.Errorf("invalid sym key size (%d); should be %d bytes", len(cfg.SymmetricKey), sodium.SymmetricKeySize)
 	}
 
 	if cfg.AutocertDirCache == "" {
@@ -70,19 +73,19 @@ func applyConfigFile(confPath string) (*serverConfig, error) {
 	}
 
 	// public/private keys
-	oscarKeyPair.Public, err = hex.DecodeString(cfg.AsymmetricKeys.Public)
+	cfg.AsymmetricKeys.Public, err = hex.DecodeString(cfg.AsymmetricKeys.PublicHex)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym public key decode failed")
 	}
-	oscarKeyPair.Secret, err = hex.DecodeString(cfg.AsymmetricKeys.Secret)
+	cfg.AsymmetricKeys.Secret, err = hex.DecodeString(cfg.AsymmetricKeys.SecretHex)
 	if err != nil {
 		return nil, errors.Wrap(err, "asym secret key decode failed")
 	}
-	if len(oscarKeyPair.Public) != sodium.PublicKeySize {
-		return nil, errors.Errorf("invalid public key size (%d); should be %d bytes", len(oscarKeyPair.Public), sodium.PublicKeySize)
+	if len(cfg.AsymmetricKeys.Public) != sodium.PublicKeySize {
+		return nil, errors.Errorf("invalid public key size (%d); should be %d bytes", len(cfg.AsymmetricKeys.Public), sodium.PublicKeySize)
 	}
-	if len(oscarKeyPair.Secret) != sodium.SecretKeySize {
-		return nil, errors.Errorf("invalid secret key size (%d); should be %d bytes", len(oscarKeyPair.Secret), sodium.SecretKeySize)
+	if len(cfg.AsymmetricKeys.Secret) != sodium.SecretKeySize {
+		return nil, errors.Errorf("invalid secret key size (%d); should be %d bytes", len(cfg.AsymmetricKeys.Secret), sodium.SecretKeySize)
 	}
 
 	// Firebase cloud messaging

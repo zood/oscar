@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // because, duh
 	"github.com/pkg/errors"
@@ -15,6 +16,11 @@ import (
 // InMemoryDSN creates a temporary in-memory only database when used as a DSN
 const InMemoryDSN = ":memory:"
 
+const (
+	tableTickets = "tickets"
+)
+
+// sqliteDB fulfills the relstor.Provider interface
 type sqliteDB struct {
 	dbx *sqlx.DB
 }
@@ -45,9 +51,16 @@ func New(dsn string) (relstor.Provider, error) {
 		}
 		fallthrough
 	case 1:
+		for _, q := range migrationQueries002 {
+			_, err := tx.Exec(q)
+			if err != nil {
+				return nil, err
+			}
+		}
+	case 2:
 		// database schema is up to date. nothing to do.
 	}
-	db.setSchemaVersion(tx, 1)
+	db.setSchemaVersion(tx, 2)
 
 	err = tx.Commit()
 	if err != nil {
@@ -75,14 +88,10 @@ func (db sqliteDB) APNSTokensRaw(userID int64) ([]string, error) {
 	const query = `SELECT token FROM user_apns_tokens WHERE user_id=?`
 	tokens := make([]string, 0)
 	err := db.dbx.Select(&tokens, query, userID)
-	switch err {
-	case nil:
-		fallthrough
-	case sql.ErrNoRows:
-		return tokens, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
+	return tokens, nil
 }
 
 func (db sqliteDB) APNSTokenUser(userID int64, token string) (*relstor.APNSTokenRecord, error) {
@@ -97,6 +106,10 @@ func (db sqliteDB) APNSTokenUser(userID int64, token string) (*relstor.APNSToken
 	default:
 		return nil, err
 	}
+}
+
+func (db sqliteDB) Database() *sql.DB {
+	return db.dbx.DB
 }
 
 func (db sqliteDB) DeleteAPNSToken(token string) error {
@@ -140,6 +153,13 @@ func (db sqliteDB) DeleteSessionChallengeID(id int64) error {
 
 func (db sqliteDB) DeleteSessionChallengeUser(userID int64) error {
 	_, err := db.dbx.Exec("DELETE FROM session_challenges WHERE user_id=?", userID)
+	return err
+}
+
+func (db sqliteDB) DeleteTickets(olderThan int64) error {
+	_, err := squirrel.Delete(tableTickets).
+		Where(squirrel.LtOrEq{"timestamp": olderThan}).
+		RunWith(db.dbx.DB).Exec()
 	return err
 }
 
@@ -248,6 +268,14 @@ func (db sqliteDB) InsertSessionChallenge(userID int64, creationDate int64, chal
 	}
 
 	return nil
+}
+
+func (db sqliteDB) InsertTicket(ticket string, userID int64) error {
+	_, err := squirrel.Insert(tableTickets).
+		Columns("ticket", "user_id").
+		Values(ticket, userID).
+		RunWith(db.dbx.DB).Exec()
+	return err
 }
 
 func (db sqliteDB) InsertUser(user relstor.UserRecord, verificationToken *string) (int64, error) {
@@ -424,6 +452,23 @@ func (db sqliteDB) SessionChallenge(userID int64) (*relstor.SessionChallengeReco
 		return nil, nil
 	default:
 		return nil, errors.Wrap(err, "Unable to query for session challenge")
+	}
+}
+
+func (db sqliteDB) Ticket(ticket string) (userID, timestamp int64, err error) {
+	err = squirrel.Select("user_id", "timestamp").
+		From(tableTickets).
+		Where(squirrel.Eq{"ticket": ticket}).
+		RunWith(db.dbx.DB).
+		QueryRow().
+		Scan(&userID, &timestamp)
+	switch err {
+	case nil:
+		return userID, timestamp, nil
+	case sql.ErrNoRows:
+		return 0, 0, nil
+	default:
+		return 0, 0, err
 	}
 }
 

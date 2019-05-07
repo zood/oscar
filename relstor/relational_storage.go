@@ -70,6 +70,7 @@ type Provider interface {
 	DeleteMessageToRecipient(recipientID, msgID int64) error
 	DeleteSessionChallengeID(id int64) error
 	DeleteSessionChallengeUser(userID int64) error
+	DeleteTickets(olderThan int64) error
 	DisavowEmail(token string) error
 	EmailVerificationTokenRecord(token string) (*EmailVerificationTokenRecord, error)
 	FCMToken(token string) (*FCMTokenRecord, error)
@@ -79,6 +80,7 @@ type Provider interface {
 	InsertFCMToken(userID int64, token string) error
 	InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error)
 	InsertSessionChallenge(userID int64, creationDate int64, challenge []byte) error
+	InsertTicket(ticket string, userID int64) error
 	InsertUser(user UserRecord, verificationToken *string) (int64, error)
 	LimitedUserInfo(username string) (id int64, pubKey []byte, err error)
 	LimitedUserInfoID(userID int64) (username string, pubKey []byte, err error)
@@ -87,6 +89,7 @@ type Provider interface {
 	ReplaceAPNSToken(old, new string) (rowsAffected int64, err error)
 	ReplaceFCMToken(old, new string) (rowsAffected int64, err error)
 	SessionChallenge(userID int64) (*SessionChallengeRecord, error)
+	Ticket(ticket string) (userID, timestamp int64, err error)
 	UpdateUserIDOfAPNSToken(newUserID int64, token string) error
 	UpdateUserIDOfFCMToken(newUserID int64, token string) error
 	User(username string) (*UserRecord, error)

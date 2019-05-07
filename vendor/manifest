@@ -128,6 +128,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/Masterminds/squirrel",
+			"repository": "https://github.com/Masterminds/squirrel",
+			"vcs": "git",
+			"revision": "55303df43ec0bf2b0ce3f9c3d8c3ce07022ef76b",
+			"branch": "v1",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/PuerkitoBio/goquery",
 			"repository": "https://github.com/PuerkitoBio/goquery",
 			"vcs": "git",
@@ -307,7 +315,7 @@
 			"importpath": "github.com/gorilla/mux",
 			"repository": "https://github.com/gorilla/mux",
 			"vcs": "git",
-			"revision": "757bef944d0f21880861c2dd9c871ca543023cba",
+			"revision": "c5c6c98bc25355028a63748a498942a6398ccd22",
 			"branch": "master",
 			"notests": true
 		},
@@ -324,6 +332,22 @@
 			"repository": "https://github.com/jmoiron/sqlx",
 			"vcs": "git",
 			"revision": "cac998c4f0959c19c638c523e374fa8e4e0bcfe3",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/lann/builder",
+			"repository": "https://github.com/lann/builder",
+			"vcs": "git",
+			"revision": "47ae307949d02aa1f1069fdafc00ca08e1dbabac",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/lann/ps",
+			"repository": "https://github.com/lann/ps",
+			"vcs": "git",
+			"revision": "62de8c46ede02a7675c4c79c84883eb164cb71e3",
 			"branch": "master",
 			"notests": true
 		},

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"zood.xyz/oscar/base62"
 	"zood.xyz/oscar/encodable"
 	"zood.xyz/oscar/smtp"
 	"zood.xyz/oscar/sodium"
@@ -18,6 +19,39 @@ import (
 	"zood.xyz/oscar/boltdb"
 	"zood.xyz/oscar/sqlite"
 )
+
+func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPair sodium.KeyPair) {
+	username := strings.ToLower(base62.Rand(8))
+	keyPair, _ = sodium.NewKeyPair()
+	passwordSalt := make([]byte, sodium.PasswordStretchingSaltSize)
+	sodium.Random(passwordSalt)
+	symKey := make([]byte, sodium.SymmetricKeySize)
+	sodium.Random(symKey)
+	user = User{
+		Email:                       "",
+		PasswordHashAlgorithm:       sodium.Argon2id13.Name,
+		PasswordHashMemoryLimit:     sodium.Argon2id13.MemLimitInteractive,
+		PasswordHashOperationsLimit: sodium.Argon2id13.OpsLimitInteractive,
+		PasswordSalt:                passwordSalt,
+		PublicKey:                   keyPair.Public,
+		Username:                    username,
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-key"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+	}
+	pubID, sErr := createUser(providers.db, providers.kvs, smtp.MockSendEmailFunc(), user)
+	if sErr != nil {
+		t.Fatal(sErr)
+	}
+	user.PublicID = pubID
+	var err error
+	user.ID, err = providers.kvs.UserIDFromPublicID(pubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
 
 func TestCreateUserNoEmail(t *testing.T) {
 	db, _ := sqlite.New(sqlite.InMemoryDSN)
@@ -157,8 +191,11 @@ func TestCreateUserHandler(t *testing.T) {
 
 	data, _ := json.Marshal(user)
 	r := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(data))
-	ctx := context.WithValue(r.Context(), contextRelationalStorageProviderKey, db)
-	ctx = context.WithValue(ctx, contextKeyValueProviderKey, kvs)
+	providers := &serverProviders{
+		db:  db,
+		kvs: kvs,
+	}
+	ctx := context.WithValue(r.Context(), contextServerProvidersKey, providers)
 	ctx = context.WithValue(ctx, contextSendEmailerKey, sendEmail)
 	r = r.WithContext(ctx)
 	w := httptest.NewRecorder()

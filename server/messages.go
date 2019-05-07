@@ -46,14 +46,15 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	if shouldLogInfo() {
 		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
 			db.Username(sessionUserID), db.Username(userID),
 			body.Urgent, body.Transient)
 	}
 
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	msg := Message{}
 	msg.CipherText = body.CipherText
 	msg.Nonce = body.Nonce
@@ -89,7 +90,8 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	if shouldLogInfo() {
 		log.Printf("get_message: %s %d", db.Username(userID), msgID)
 	}
@@ -104,7 +106,7 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	pubID, err := kvs.PublicIDFromUserID(rec.SenderID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -126,7 +128,8 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 // getMessagesHandler handles GET /messages
 func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	if shouldLogInfo() {
 		log.Printf("get_messages: %s", db.Username(userID))
 	}
@@ -136,7 +139,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 		sendInternalErr(w, err)
 		return
 	}
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	msgs := make([]Message, 0, 0)
 	for _, r := range records {
 		pubID, err := kvs.PublicIDFromUserID(r.SenderID)
@@ -170,7 +173,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	if shouldLogInfo() {
 		log.Printf("delete_message: %s %d", db.Username(userID), msgID)
 	}

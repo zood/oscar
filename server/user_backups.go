@@ -16,13 +16,14 @@ const dbBackupsDir = "db_backups"
 
 func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	if shouldLogInfo() {
 		log.Printf("download_backup: %s", db.Username(userID))
 	}
 
 	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
-	fs := fileStorageProvider(r.Context())
+	fs := providers.fs
 	err := fs.ReadFile(relPath, w)
 	if err != nil {
 		if err == filestor.ErrFileNotExist {
@@ -37,7 +38,8 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 
 func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	db := database(r.Context())
+	providers := providersCtx(r.Context())
+	db := providers.db
 	if shouldLogInfo() {
 		log.Printf("backup: %s", db.Username(userID))
 	}
@@ -50,7 +52,7 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 
 	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
 	rdr := bytes.NewReader(buf)
-	fs := fileStorageProvider(r.Context())
+	fs := providers.fs
 	err = fs.WriteFile(relPath, rdr)
 	if err != nil {
 		sendInternalErr(w, err)

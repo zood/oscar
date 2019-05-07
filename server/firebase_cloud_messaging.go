@@ -191,7 +191,7 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	ftr, err := db.FCMToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -229,7 +229,7 @@ func deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := mux.Vars(r)["token"]
 
-	db := database(r.Context())
+	db := providersCtx(r.Context()).db
 	err := db.DeleteFCMTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)

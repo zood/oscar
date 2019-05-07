@@ -3,6 +3,7 @@ package sqlite
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -40,6 +41,14 @@ func db(t *testing.T) relstor.Provider {
 	}
 
 	return sqldb
+}
+
+func newDB(t *testing.T) sqliteDB {
+	db, err := New(InMemoryDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db.(sqliteDB)
 }
 
 func TestInsertUser(t *testing.T) {
@@ -823,18 +832,97 @@ func TestDeleteAPNSToken(t *testing.T) {
 }
 
 func TestAPNSTokensRaw(t *testing.T) {
+	db := newDB(t)
+
+	tokens, err := db.APNSTokensRaw(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("Expected 0 tokens. Found %d", len(tokens))
+	}
+
 	// add a bunch of tokens for a new fictitious user
 	numTokens := 8
 	var userID int64 = 100
 	for i := 0; i < numTokens; i++ {
-		db(t).InsertAPNSToken(userID, fmt.Sprintf("token-livebeef-%d", i))
+		db.InsertAPNSToken(userID, fmt.Sprintf("token-livebeef-%d", i))
 	}
 
-	tokens, err := db(t).APNSTokensRaw(100)
+	tokens, err = db.APNSTokensRaw(100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(tokens) != numTokens {
 		t.Fatalf("Only found %d tokens. Expecting %d.", len(tokens), numTokens)
+	}
+}
+
+func TestTickets(t *testing.T) {
+	db := newDB(t)
+	userID, timestamp, err := db.Ticket("deadbeef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userID != 0 {
+		t.Fatalf("Expected 0, got %d", userID)
+	}
+	if timestamp != 0 {
+		t.Fatalf("Expected 0, got %d", timestamp)
+	}
+
+	ticket := "boppity-bop"
+	var expectedID int64 = 42
+	err = db.InsertTicket(ticket, expectedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	userID, timestamp, err = db.Ticket(ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Printf("ticket timestamp is %d", timestamp)
+	if userID != expectedID {
+		t.Fatalf("user id mismatch: %d != %d", userID, expectedID)
+	}
+	// the timestamp shouldn't be older than 1 second ago
+	now := time.Now().Unix()
+	if timestamp < now-1 {
+		t.Fatalf("timestamp is too old. It's %d, but currently %d", timestamp, now)
+	}
+	// the timestamp shouldn't be in the future either
+	if timestamp > now {
+		t.Fatalf("timestamp is in the future. It's %d, currently %d", timestamp, now)
+	}
+
+	// test ticket deletion
+	if err = db.DeleteTickets(now - 5); err != nil {
+		t.Fatal(err)
+	}
+
+	// the ticket should still be in the database
+	userID, timestamp, err = db.Ticket(ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userID != expectedID {
+		t.Fatalf("user id mismatch: %d != %d", userID, expectedID)
+	}
+
+	// perform a delete that SHOULD delete our ticket
+	if err = db.DeleteTickets(now); err != nil {
+		t.Fatal(err)
+	}
+
+	userID, timestamp, err = db.Ticket(ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userID != 0 {
+		t.Fatalf("Ticket was found. Got userid %d", userID)
+	}
+	if timestamp != 0 {
+		t.Fatalf("Timestamp was found. Got timestamp %d", timestamp)
 	}
 }

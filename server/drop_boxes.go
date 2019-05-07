@@ -212,7 +212,7 @@ func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	kvs := keyValueStorage(r.Context())
+	kvs := providersCtx(r.Context()).kvs
 	pkg, err := kvs.PickUpPackage(boxID)
 	if err != nil {
 		sendInternalErr(w, err)
@@ -231,6 +231,7 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 
 	var boxes string
 
+	providers := providersCtx(r.Context())
 	// build the map of boxes => packages
 	pkgs := make(map[string][]byte)
 	for {
@@ -267,10 +268,10 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		db := database(r.Context())
+		db := providers.db
 		log.Printf("drop_multiple_packages: %s => %s", db.Username(userID), boxes)
 	}
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	for hexBoxID, pkg := range pkgs {
 		boxID, _ := hex.DecodeString(hexBoxID)
 		err := kvs.DropPackage(pkg, boxID)
@@ -296,9 +297,10 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	providers := providersCtx(r.Context())
 	if shouldLogInfo() {
 		userID := userIDFromContext(r.Context())
-		db := database(r.Context())
+		db := providers.db
 		log.Printf("%s dropping pkg to %s", db.Username(userID), hexBoxID)
 	}
 
@@ -316,7 +318,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: about to update the bucket")
 	}
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	err = kvs.DropPackage(pkg, boxID)
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: bucket update error? %v", err)
@@ -355,7 +357,7 @@ func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := keyValueStorage(r.Context())
+	kvs := providersCtx(r.Context()).kvs
 	pl := newPackageListener(conn, kvs)
 	pl.start()
 }

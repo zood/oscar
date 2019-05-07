@@ -35,3 +35,10 @@ var migrationQueries001 = []string{
 						 password_hash_memory_limit INTEGER NOT NULL,
 						 email TEXT)`,
 }
+
+var migrationQueries002 = []string{
+	`CREATE TABLE tickets (
+				  ticket TEXT NOT NULL PRIMARY KEY,
+				  user_id INTEGER NOT NULL,
+				  timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')))`,
+}

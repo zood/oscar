@@ -178,15 +178,27 @@ func newSocketServer(conn *websocket.Conn, userID int64, kvs kvstor.Provider) so
 func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// check the 'Sec-Websocket-Protocol' header for an access token
 	token := r.Header.Get("Sec-Websocket-Protocol")
-	userID, err := verifyAccessToken(database(r.Context()), token)
+	providers := providersCtx(r.Context())
+	db := providers.db
+	userID, err := verifyAccessToken(db, providers.symKey, providers.keyPair, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
 	if userID == 0 {
-		sendInvalidAccessToken(w)
-		return
+		// check if they specified a ticket
+		ticket := r.URL.Query().Get("ticket")
+		userID, err = verifySessionTicket(db, ticket)
+		if err != nil {
+			sendInternalErr(w, err)
+			return
+		}
+		// if the user id is still 0, then reject the request
+		if userID == 0 {
+			sendInvalidAccessToken(w)
+			return
+		}
 	}
 
 	upgrade := websocket.Upgrader{
@@ -200,7 +212,7 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := keyValueStorage(r.Context())
+	kvs := providers.kvs
 	ss := newSocketServer(conn, userID, kvs)
 	ss.start()
 }
