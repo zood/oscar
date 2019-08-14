@@ -93,14 +93,3 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 
 	sendSuccess(w, nil)
 }
-
-// func sendEmailFuncContext(ctx context.Context) smtp.SendEmailFunc {
-// 	return ctx.Value(contextSendEmailerKey).(smtp.SendEmailFunc)
-// }
-
-// func sendEmailFuncInjector(sendEmail smtp.SendEmailFunc, next http.HandlerFunc) http.HandlerFunc {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		ctx := context.WithValue(r.Context(), contextSendEmailerKey, sendEmail)
-// 		next.ServeHTTP(w, r.WithContext(ctx))
-// 	}
-// }
