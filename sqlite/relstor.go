@@ -366,7 +366,7 @@ func (db sqliteDB) MessageRecords(recipientID int64) ([]relstor.MessageRecord, e
 	}
 	defer rows.Close()
 
-	msgs := make([]relstor.MessageRecord, 0, 0)
+	msgs := make([]relstor.MessageRecord, 0)
 	for rows.Next() {
 		msg := relstor.MessageRecord{}
 		err = rows.StructScan(&msg)

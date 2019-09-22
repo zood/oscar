@@ -173,7 +173,7 @@ func StretchPassword(keySize int, pw string, salt []byte, alg Algorithm, opsLimi
 // SymmetricKeyEncrypt encrypts a message using symmetric cryptography
 func SymmetricKeyEncrypt(msg, key []byte) (cipherText, nonce []byte, err error) {
 	if len(key) != SymmetricKeySize {
-		return nil, nil, errors.New("Key should be 'SymmetricKeySize' bytes long")
+		return nil, nil, errors.New("key should be 'SymmetricKeySize' bytes long")
 	}
 	cipherText = make([]byte, len(msg)+secretBoxMACSize)
 	nonce = make([]byte, secretBoxNonceSize)

@@ -12,13 +12,13 @@ import (
 
 const (
 	socketClientCmdNop    byte = 0
-	socketClientCmdWatch       = 1
-	socketClientCmdIgnore      = 2
+	socketClientCmdWatch  byte = 1
+	socketClientCmdIgnore byte = 2
 )
 
 const (
 	socketServerCmdPackage          byte = 1
-	socketServerCmdPushNotification      = 2
+	socketServerCmdPushNotification byte = 2
 )
 
 var messagesPubSub = pubsub.NewInt64()

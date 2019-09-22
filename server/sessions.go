@@ -19,13 +19,6 @@ import (
 	"zood.dev/oscar/sodium"
 )
 
-type sessionChallenge struct {
-	ID           int64  `db:"id"`
-	UserID       int64  `db:"user_id"`
-	CreationDate int64  `db:"creation_date"`
-	Challenge    []byte `db:"challenge"`
-}
-
 type encryptedData struct {
 	CipherText encodable.Bytes `json:"cipher_text"`
 	Nonce      encodable.Bytes `json:"nonce"`
@@ -166,7 +159,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}
-	if decryptedChallenge == nil || len(decryptedChallenge) == 0 {
+	if len(decryptedChallenge) == 0 {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
 	}

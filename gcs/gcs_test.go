@@ -76,7 +76,7 @@ func TestWriteNewFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(dst.Bytes(), data) {
-		t.Fatalf("data read back is not correct. Got '%s'", string(dst.Bytes()))
+		t.Fatalf("data read back is not correct. Got '%s'", dst.String())
 	}
 }
 
@@ -102,6 +102,6 @@ func TestUpdateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(dst.Bytes(), data2) {
-		t.Fatalf("data read back is not correct. Got '%s'", string(dst.Bytes()))
+		t.Fatalf("data read back is not correct. Got '%s'", dst.String())
 	}
 }

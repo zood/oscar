@@ -902,7 +902,7 @@ func TestTickets(t *testing.T) {
 	}
 
 	// the ticket should still be in the database
-	userID, timestamp, err = db.Ticket(ticket)
+	userID, _, err = db.Ticket(ticket)
 	if err != nil {
 		t.Fatal(err)
 	}

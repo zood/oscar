@@ -34,19 +34,19 @@ func New(dbPath string) (kvstor.Provider, error) {
 	}
 	_, err = tx.CreateBucketIfNotExists(userIDsBucketName)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s' bucket: %v", userIDsBucketName, err)
+		return nil, fmt.Errorf("while creating '%s' bucket: %w", userIDsBucketName, err)
 	}
 	_, err = tx.CreateBucketIfNotExists(publicIDsBucketName)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s' bucket: %v", publicIDsBucketName, err)
+		return nil, fmt.Errorf("while creating '%s' bucket: %w", publicIDsBucketName, err)
 	}
 	_, err = tx.CreateBucketIfNotExists(dropboxesBucketName)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s' bucket: %v", dropboxesBucketName, err)
+		return nil, fmt.Errorf("while creating '%s' bucket: %w", dropboxesBucketName, err)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return nil, fmt.Errorf("Error commiting initialiation of kvdb: %v", err)
+		return nil, fmt.Errorf("while commiting initialiation of kvdb: %w", err)
 	}
 
 	return boltdbProvider{db: db}, nil

@@ -12,8 +12,6 @@ import (
 	"zood.dev/oscar/relstor"
 )
 
-var gAPNSP8Path string
-
 var apnsClient *apns2.Client
 
 type apsPayload struct {

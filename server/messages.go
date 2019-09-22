@@ -140,7 +140,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kvs := providers.kvs
-	msgs := make([]Message, 0, 0)
+	msgs := make([]Message, 0)
 	for _, r := range records {
 		pubID, err := kvs.PublicIDFromUserID(r.SenderID)
 		if err != nil {

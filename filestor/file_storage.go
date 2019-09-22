@@ -12,4 +12,4 @@ type Provider interface {
 }
 
 // ErrFileNotExist indicates the files does not exist
-var ErrFileNotExist = errors.New("File does not exist")
+var ErrFileNotExist = errors.New("file does not exist")

@@ -11,7 +11,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"zood.dev/oscar/encodable"
 	"zood.dev/oscar/internal/pubsub"
 	"zood.dev/oscar/kvstor"
 )
@@ -22,14 +21,9 @@ var dropBoxPubSub = pubsub.New()
 
 const (
 	clientCmdNop    byte = 0
-	clientCmdWatch       = 1
-	clientCmdIgnore      = 2
+	clientCmdWatch  byte = 1
+	clientCmdIgnore byte = 2
 )
-
-type pkgEvent struct {
-	Pkg   encodable.Bytes `json:"package"`
-	BoxID encodable.Bytes `json:"box_id"`
-}
 
 type subscriptionReader struct {
 	sub    chan []byte

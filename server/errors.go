@@ -13,29 +13,29 @@ type ErrCode int
 // Errors used throughout this package
 const (
 	errorNone                            ErrCode = 0
-	errorInternal                                = 1
-	errorBadRequest                              = 2
-	errorInvalidUsername                         = 3
-	errorInvalidPublicKey                        = 4
-	errorInvalidWrappedSecretKey                 = 5
-	errorInvalidWrappedSecretKeyNonce            = 6
-	errorInvalidWrappedSymmetricKey              = 7
-	errorInvalidWrappedSymmetricKeyNonce         = 8
-	errorInvalidPasswordSalt                     = 9
-	errorUsernameNotAvailable                    = 10
-	errorNotFound                                = 11
-	errorInsufficientPermission                  = 12
-	errorArgon2iOpsLimitTooLow                   = 13
-	errorArgon2iMemLimitTooLow                   = 14
-	errorInvalidAccessToken                      = 15
-	errorUserNotFound                            = 16
-	errorChallengeNotFound                       = 17
-	errorChallengeExpired                        = 18
-	errorLoginFailed                             = 19
-	errorBackupNotFound                          = 20
-	errorInvalidEmail                            = 21
-	errorMissingVerificationToken                = 22
-	errorInvalidPasswordHashAlgorithm            = 23
+	errorInternal                        ErrCode = 1
+	errorBadRequest                      ErrCode = 2
+	errorInvalidUsername                 ErrCode = 3
+	errorInvalidPublicKey                ErrCode = 4
+	errorInvalidWrappedSecretKey         ErrCode = 5
+	errorInvalidWrappedSecretKeyNonce    ErrCode = 6
+	errorInvalidWrappedSymmetricKey      ErrCode = 7
+	errorInvalidWrappedSymmetricKeyNonce ErrCode = 8
+	errorInvalidPasswordSalt             ErrCode = 9
+	errorUsernameNotAvailable            ErrCode = 10
+	errorNotFound                        ErrCode = 11
+	errorInsufficientPermission          ErrCode = 12
+	errorArgon2iOpsLimitTooLow           ErrCode = 13
+	errorArgon2iMemLimitTooLow           ErrCode = 14
+	errorInvalidAccessToken              ErrCode = 15
+	errorUserNotFound                    ErrCode = 16
+	errorChallengeNotFound               ErrCode = 17
+	errorChallengeExpired                ErrCode = 18
+	errorLoginFailed                     ErrCode = 19
+	errorBackupNotFound                  ErrCode = 20
+	errorInvalidEmail                    ErrCode = 21
+	errorMissingVerificationToken        ErrCode = 22
+	errorInvalidPasswordHashAlgorithm    ErrCode = 23
 )
 
 type serverError struct {

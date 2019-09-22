@@ -177,9 +177,6 @@ func newOscarRouter(p *serverProviders) http.HandlerFunc {
 	// return providersInjector(p.fs, p.db, p.kvs, logHandler(r))
 }
 
-func testHandler(w http.ResponseWriter, r *http.Request) {
-}
-
 type tlsHandshakeFilter struct{}
 
 func (dl *tlsHandshakeFilter) Write(p []byte) (int, error) {
@@ -189,7 +186,4 @@ func (dl *tlsHandshakeFilter) Write(p []byte) (int, error) {
 
 	log.Printf("%s", p)
 	return len(p), nil
-}
-
-func playground() {
 }
