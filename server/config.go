@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"zood.dev/oscar/sodium"
@@ -36,9 +37,9 @@ type serverConfig struct {
 	} `json:"file_storage"`
 	FCMServerKey    string `json:"fcm_server_key"`
 	Hostname        string `json:"hostname"`
-	KVDBPath        string `json:"kv_db_path"`
+	KVDBDirectory   string `json:"kv_db_directory"`
 	Port            *int   `json:"port,omitempty"`
-	SQLDSN          string `json:"sql_dsn"`
+	SQLDBDirectory  string `json:"sql_db_directory"`
 	SymmetricKey    []byte `json:"-"`
 	SymmetricKeyHex string `json:"symmetric_key"`
 	TLS             *bool  `json:"tls,omitempty"`
@@ -53,7 +54,9 @@ func loadConfig(confPath string) (*serverConfig, error) {
 	}
 
 	cfg := serverConfig{}
-	err = json.NewDecoder(f).Decode(&cfg)
+	decoder := json.NewDecoder(f)
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to parse config file")
 	}
@@ -109,13 +112,27 @@ func loadConfig(confPath string) (*serverConfig, error) {
 	}
 
 	// sql database
-	if cfg.SQLDSN == "" {
-		return nil, errors.New("'sql_dsn' is empty/missing")
+	if cfg.SQLDBDirectory == "" {
+		return nil, fmt.Errorf("'sql_db_directory' is empty/missing")
+	}
+	if fi, err := os.Stat(cfg.SQLDBDirectory); err != nil {
+		return nil, fmt.Errorf("while stat'ing sql_db_directory: %w", err)
+	} else {
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("'%s' is not a directory. need a directory for 'sql_db_directory'", cfg.SQLDBDirectory)
+		}
 	}
 
 	// key-value database
-	if cfg.KVDBPath == "" {
-		return nil, errors.New("'kv_db_path' is empty/missing")
+	if cfg.KVDBDirectory == "" {
+		return nil, fmt.Errorf("'kv_db_directory' is empty/missing")
+	}
+	if fi, err := os.Stat(cfg.KVDBDirectory); err != nil {
+		return nil, fmt.Errorf("while stat'ing kv_db_directory: %w", err)
+	} else {
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("'%s' is not a directory. need a directory for 'kv_db_directory'", cfg.KVDBDirectory)
+		}
 	}
 
 	// set up our file storage

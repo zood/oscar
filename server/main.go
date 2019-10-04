@@ -7,21 +7,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
+	"github.com/gorilla/mux"
+	"golang.org/x/crypto/acme/autocert"
 	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/filestor"
+	"zood.dev/oscar/gcs"
+	"zood.dev/oscar/localdisk"
 	"zood.dev/oscar/mailgun"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
-
-	"zood.dev/oscar/gcs"
-	"zood.dev/oscar/localdisk"
-
-	"golang.org/x/crypto/acme/autocert"
-
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/gorilla/mux"
 )
 
 var defaultCiphers = []uint16{
@@ -51,14 +48,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rs, err := sqlite.New(config.SQLDSN)
+	dsn := fmt.Sprintf("file:%s", filepath.Join(config.SQLDBDirectory, "sqlite.db"))
+	rs, err := sqlite.New(dsn)
 	if err != nil {
-		log.Fatalf("Unable to initialize sqlite db: %v", err)
+		log.Fatalf("Unable to open sqlite db: %v", err)
 	}
 
-	kvs, err := boltdb.New(config.KVDBPath)
+	kvdbPath := filepath.Join(config.KVDBDirectory, "kv.db")
+	kvs, err := boltdb.New(kvdbPath)
 	if err != nil {
-		log.Fatalf("Unable to initialize boltdb: %v", err)
+		log.Fatalf("Unable to open boltdb: %v", err)
 	}
 
 	var fs filestor.Provider
