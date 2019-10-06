@@ -11,25 +11,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/encodable"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
 )
 
 func loginTestUser(t *testing.T, providers *serverProviders, user User, userKeyPair sodium.KeyPair) (accessToken string) {
+	t.Helper()
+
 	creationDate := time.Now().Unix()
 	challenge := make([]byte, 255)
 	crand.Read(challenge)
 
-	cdCT, cdNonce, _ := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), providers.keyPair.Public, userKeyPair.Secret)
+	cdCT, cdNonce, err := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), providers.keyPair.Public, userKeyPair.Secret)
+	require.NoError(t, err)
 
 	token := sessionToken{
 		Name:                  user.Username,
 		CreationDate:          creationDate,
 		EncryptedCreationDate: append(cdNonce, cdCT...),
 	}
-	tokenBytes, _ := json.Marshal(token)
-	tokenCT, tokeNonce, _ := sodium.SymmetricKeyEncrypt(tokenBytes, providers.symKey)
+	tokenBytes, err := json.Marshal(token)
+	require.NoError(t, err)
+	tokenCT, tokeNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, providers.symKey)
+	require.NoError(t, err)
 	accessTokenBytes := append(tokeNonce, tokenCT...)
 	accessToken = base64.StdEncoding.EncodeToString(accessTokenBytes)
 	return

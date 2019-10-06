@@ -8,16 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/filestor"
 )
 
 var testDir string
 
-func provider() filestor.Provider {
-	p, err := New("/home/arash/coding/pijun_env/gcp-credentials.json", "dev-api-pijun-io")
-	if err != nil {
-		panic(err)
-	}
+func provider(t *testing.T) filestor.Provider {
+	t.Helper()
+	p, err := New("/home/arash/coding/zood/api-env/gcp-credentials.json", "dev-api-zood-xyz")
+	require.NoError(t, err)
+
 	return p
 }
 
@@ -30,25 +31,18 @@ func TestMain(m *testing.M) {
 
 func TestProviderCreation(t *testing.T) {
 	_, err := New("", "")
-	if err == nil {
-		t.Fatalf("Should be error when no credentials are provided. Got %v", err)
-	}
-	_, err = New("/home/arash/coding/pijun_env/gcp-credentials.json", "")
-	if err == nil {
-		t.Fatalf("Should be error when no bucket name is provided. Got %v", err)
-	}
+	require.Error(t, err)
 
-	p, err := New("/home/arash/coding/pijun_env/gcp-credentials.json", "dev-api-pijun-io")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p == nil {
-		t.Fatal("provider should not be nil")
-	}
+	_, err = New("/home/arash/coding/zood/api-env/gcp-credentials.json", "")
+	require.Error(t, err)
+
+	p, err := New("/home/arash/coding/zood/api-env/gcp-credentials.json", "dev-api-zood-xyz")
+	require.NoError(t, err)
+	require.NotNil(t, p)
 }
 
 func TestReadNonExistentObject(t *testing.T) {
-	p := provider()
+	p := provider(t)
 	fp := filepath.Join(testDir, "should-not-exist")
 
 	dst := &bytes.Buffer{}
@@ -59,7 +53,7 @@ func TestReadNonExistentObject(t *testing.T) {
 }
 
 func TestWriteNewFile(t *testing.T) {
-	p := provider()
+	p := provider(t)
 	fp := filepath.Join(testDir, "lyrics.txt")
 
 	data := []byte("Hello, darkness, my old friend")
@@ -81,7 +75,7 @@ func TestWriteNewFile(t *testing.T) {
 }
 
 func TestUpdateFile(t *testing.T) {
-	p := provider()
+	p := provider(t)
 	fp := filepath.Join(testDir, "list.txt")
 	data1 := []byte("*Eggs\n*Milk\n")
 	src := bytes.NewBuffer(data1)

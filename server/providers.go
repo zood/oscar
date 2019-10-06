@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	crand "crypto/rand"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
+	"zood.dev/oscar/localdisk"
 	"zood.dev/oscar/relstor"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
@@ -24,24 +30,38 @@ type serverProviders struct {
 	keyPair sodium.KeyPair
 }
 
+func (sp *serverProviders) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), contextServerProvidersKey, sp)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func createTestProviders(t *testing.T) *serverProviders {
+	t.Helper()
+
 	db, err := sqlite.New(sqlite.InMemoryDSN)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	kvs := boltdb.Temp(t)
 	symKey := make([]byte, sodium.SymmetricKeySize)
 	crand.Read(symKey)
 	keyPair, err := sodium.NewKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
+	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", t.Name(), time.Now().Unix()))
+	err = os.MkdirAll(tmpDir, 0755)
+	require.NoError(t, err)
+	fstor, err := localdisk.New(tmpDir)
+	require.NoError(t, err)
+
 	return &serverProviders{
 		db:      db,
 		emailer: smtp.NewMockSendEmailer(),
 		kvs:     kvs,
 		symKey:  symKey,
 		keyPair: keyPair,
+		fs:      fstor,
 	}
 }
 

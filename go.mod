@@ -14,6 +14,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/pkg/errors v0.8.1
 	github.com/sideshow/apns2 v0.19.0
+	github.com/stretchr/testify v1.4.0
 	golang.org/x/crypto v0.0.0-20191001170739-f9e2070545dc
 	google.golang.org/api v0.9.0
 )

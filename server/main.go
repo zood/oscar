@@ -126,54 +126,56 @@ func main() {
 	}
 }
 
-func newOscarRouter(p *serverProviders) http.HandlerFunc {
+func newOscarRouter(p *serverProviders) http.Handler {
 	r := mux.NewRouter()
-	r.HandleFunc("/server-info", serverInfoHandler).Methods("GET")
-	r.HandleFunc("/log-level", logLevelHandler).Methods("GET")
-	r.HandleFunc("/log-level", setLogLevelHandler).Methods("PUT")
+	r.HandleFunc("/server-info", serverInfoHandler).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/log-level", logLevelHandler).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/log-level", setLogLevelHandler).Methods(http.MethodPut, http.MethodOptions)
 	v1 := r.PathPrefix("/1").Subrouter()
 
-	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods("GET")
-	v1.HandleFunc("/users", createUserHandler).Methods(http.MethodPost)
-	v1.Handle("/users/me/apns-tokens", sessionHandler(addAPNSTokenHandler)).Methods(http.MethodPost)
-	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(deleteAPNSTokenHandler)).Methods(http.MethodDelete)
-	v1.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods("POST")
-	v1.Handle("/users/me/fcm-tokens/{token}", sessionHandler(deleteFCMTokenHandler)).Methods("DELETE")
-	v1.Handle("/users/me/backup", sessionHandler(retrieveBackupHandler)).Methods("GET")
-	v1.Handle("/users/me/backup", sessionHandler(saveBackupHandler)).Methods("PUT")
-	v1.Handle("/users/{public_id}", sessionHandler(getUserInfoHandler)).Methods("GET")
-	v1.Handle("/users/{public_id}/messages", sessionHandler(sendMessageToUserHandler)).Methods("POST")
-	v1.Handle("/users/{public_id}/public-key", corsHandler(getUserPublicKeyHandler)).Methods("GET")
+	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.HandleFunc("/users", createUserHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens", sessionHandler(addAPNSTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(deleteAPNSTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/fcm-tokens/{token}", sessionHandler(deleteFCMTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/backup", sessionHandler(retrieveBackupHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/users/me/backup", sessionHandler(saveBackupHandler)).Methods(http.MethodPut, http.MethodOptions)
+	v1.Handle("/users/{public_id}", sessionHandler(getUserInfoHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/users/{public_id}/messages", sessionHandler(sendMessageToUserHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/users/{public_id}/public-key", getUserPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	v1.Handle("/messages", sessionHandler(getMessagesHandler)).Methods(http.MethodGet)
-	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(getMessageHandler)).Methods(http.MethodGet)
-	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(deleteMessageHandler)).Methods(http.MethodDelete)
+	v1.Handle("/messages", sessionHandler(getMessagesHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(getMessageHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(deleteMessageHandler)).Methods(http.MethodDelete, http.MethodOptions)
 
 	// this has to come first, so it has a chance to match before the box_id urls
-	v1.HandleFunc("/drop-boxes/watch", createPackageWatcherHandler).Methods("GET")
-	v1.Handle("/drop-boxes/send", sessionHandler(sendMultiplePackagesHandler)).Methods("POST")
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(pickUpPackageHandler)).Methods("GET")
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(dropPackageHandler)).Methods("PUT")
+	v1.HandleFunc("/drop-boxes/watch", createPackageWatcherHandler).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/drop-boxes/send", sessionHandler(sendMultiplePackagesHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(pickUpPackageHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(dropPackageHandler)).Methods(http.MethodPut, http.MethodOptions)
 
-	v1.HandleFunc("/public-key", corsHandler(getServerPublicKeyHandler)).Methods("GET")
+	v1.HandleFunc("/public-key", getServerPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
 	// We have to name the tickets endpoint with something that isn't a valid username, otherwise we would have just used /tickets
-	v1.Handle("/sessions/expiring-tickets", corsHandler(sessionHandler(createTicketHandler))).Methods(http.MethodPost)
-	v1.Handle("/sessions/{username}/challenge", corsHandler(createAuthChallengeHandler)).Methods("POST")
-	v1.Handle("/sessions/{username}/challenge-response", corsHandler(finishAuthChallengeHandler)).Methods("POST")
+	v1.Handle("/sessions/expiring-tickets", sessionHandler(createTicketHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/sessions/{username}/challenge", createAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/sessions/{username}/challenge-response", finishAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
 
-	v1.HandleFunc("/sockets", createSocketHandler).Methods(http.MethodGet)
+	v1.HandleFunc("/sockets", createSocketHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	v1.HandleFunc("/email-verifications", verifyEmailHandler).Methods("POST")
-	v1.HandleFunc("/email-verifications/{token}", disavowEmailHandler).Methods("DELETE")
+	v1.HandleFunc("/email-verifications", verifyEmailHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/email-verifications/{token}", disavowEmailHandler).Methods(http.MethodDelete, http.MethodOptions)
 
-	v1.HandleFunc("/goroutine-stacks", goroutineStacksHandler).Methods("GET")
-	// r.Handle("/test", logHandler(testHandler)).Methods("GET")
-	v1.HandleFunc("/logs", recordLogMessageHandler).Methods(http.MethodGet)
+	v1.HandleFunc("/goroutine-stacks", goroutineStacksHandler).Methods(http.MethodGet, http.MethodOptions)
+	v1.HandleFunc("/logs", recordLogMessageHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	return providersInjector(p, logHandler(r))
+	r.NotFoundHandler = http.HandlerFunc(notFoundHandler)
+	r.MethodNotAllowedHandler = http.HandlerFunc(notFoundHandler)
 
-	// return providersInjector(p.fs, p.db, p.kvs, logHandler(r))
+	r.Use(logMiddleware, corsMiddleware, p.Middleware)
+
+	return r
 }
 
 type tlsHandshakeFilter struct{}

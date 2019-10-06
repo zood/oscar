@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/filestor"
 )
 
@@ -56,9 +57,7 @@ func TestReadNonExistentObject(t *testing.T) {
 
 	dst := &bytes.Buffer{}
 	err := p.ReadFile(fp, dst)
-	if err != filestor.ErrFileNotExist {
-		t.Fatalf("Should have received 'file not exist'. Got %v", err)
-	}
+	require.Equal(t, filestor.ErrFileNotExist, err)
 }
 
 func TestWriteNewFile(t *testing.T) {

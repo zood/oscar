@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/kvstor"
 )
 
@@ -54,11 +55,12 @@ func New(dbPath string) (kvstor.Provider, error) {
 
 // Temp returns a new database backed by a file in the system temp directory
 func Temp(t *testing.T) kvstor.Provider {
+	t.Helper()
+
 	file := filepath.Join(os.TempDir(), fmt.Sprintf("bolt%d.db", time.Now().UnixNano()))
 	db, err := New(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	return db
 }
 

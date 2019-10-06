@@ -9,8 +9,8 @@ import (
 	"runtime"
 )
 
-func logHandler(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if shouldLogDebug() {
 			log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)
 		}
@@ -26,7 +26,11 @@ func logHandler(next http.Handler) http.HandlerFunc {
 		}()
 
 		next.ServeHTTP(w, r)
-	}
+	})
+}
+
+func notFoundHandler(w http.ResponseWriter, r *http.Request) {
+	sendErr(w, "Not an endpoint", http.StatusNotFound, errorNotAnEndpoint)
 }
 
 func sendResponse(w http.ResponseWriter, response interface{}, httpCode int) {

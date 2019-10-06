@@ -11,18 +11,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/base62"
+	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/encodable"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
-
-	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/sqlite"
 )
 
 func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPair sodium.KeyPair) {
+	t.Helper()
+
 	username := strings.ToLower(base62.Rand(8))
-	keyPair, _ = sodium.NewKeyPair()
+	var err error
+	keyPair, err = sodium.NewKeyPair()
+	require.NoError(t, err)
+
 	passwordSalt := make([]byte, sodium.PasswordStretchingSaltSize)
 	sodium.Random(passwordSalt)
 	symKey := make([]byte, sodium.SymmetricKeySize)
@@ -41,15 +46,12 @@ func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPai
 		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
 	}
 	pubID, sErr := createUser(providers.db, providers.kvs, smtp.NewMockSendEmailer(), user)
-	if sErr != nil {
-		t.Fatal(sErr)
-	}
+	require.Nil(t, sErr)
+
 	user.PublicID = pubID
-	var err error
 	user.ID, err = providers.kvs.UserIDFromPublicID(pubID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	return
 }
 

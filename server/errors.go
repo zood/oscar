@@ -36,6 +36,7 @@ const (
 	errorInvalidEmail                    ErrCode = 21
 	errorMissingVerificationToken        ErrCode = 22
 	errorInvalidPasswordHashAlgorithm    ErrCode = 23
+	errorNotAnEndpoint                   ErrCode = 24
 )
 
 type serverError struct {
