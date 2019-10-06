@@ -227,7 +227,6 @@ func sendInvalidAccessToken(w http.ResponseWriter) {
 func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Oscar-Access-Token")
-		log.Printf("checking token: %s", token)
 		providers := providersCtx(r.Context())
 		userID, err := verifyAccessToken(providers.db, providers.symKey, providers.keyPair, token)
 		if err != nil {
