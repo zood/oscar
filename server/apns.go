@@ -108,7 +108,7 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}, urgent bool) {
+func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}) {
 	tokens, err := db.APNSTokensRaw(userID)
 	if err != nil {
 		logErr(err)
@@ -118,15 +118,9 @@ func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}, urg
 	if len(tokens) == 0 {
 		return
 	}
-	var priority int
-	if urgent {
-		priority = 10
-	} else {
-		priority = 5
-	}
 	n := &apns2.Notification{
 		Topic:    "xyz.zood.michael",
-		Priority: priority,
+		Priority: 5,
 		PushType: apns2.PushTypeBackground,
 	}
 	ap := apsPayload{}

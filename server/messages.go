@@ -214,7 +214,7 @@ func pushMessageToUser(db relstor.Provider, msg Message, userID int64, urgent bo
 
 	if len(buf) <= 3584 {
 		sendFirebaseMessage(db, userID, msgMap, urgent)
-		sendAPNSMessage(db, userID, msgMap, urgent)
+		sendAPNSMessage(db, userID, msgMap)
 		return
 	}
 
@@ -229,5 +229,5 @@ func pushMessageToUser(db relstor.Provider, msg Message, userID int64, urgent bo
 		MessageID string `json:"message_id"`
 	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}
 	sendFirebaseMessage(db, userID, syncPayload, urgent)
-	sendAPNSMessage(db, userID, syncPayload, urgent)
+	sendAPNSMessage(db, userID, syncPayload)
 }
