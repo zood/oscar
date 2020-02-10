@@ -85,7 +85,6 @@ const boxNonceSize = C.crypto_box_NONCEBYTES
 const boxMACSize = C.crypto_box_MACBYTES
 const secretBoxMACSize = C.crypto_secretbox_MACBYTES
 const secretBoxNonceSize = C.crypto_secretbox_NONCEBYTES
-const secretBoxKeySize = C.crypto_secretbox_KEYBYTES
 
 func (kp KeyPair) String() string {
 	return fmt.Sprintf("public: %s\nsecret: %s",
