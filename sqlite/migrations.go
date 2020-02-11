@@ -42,3 +42,7 @@ var migrationQueries002 = []string{
 				  user_id INTEGER NOT NULL,
 				  timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')))`,
 }
+
+var migrationQueries003 = []string{
+	`CREATE UNIQUE INDEX users_username_unique_constraint ON users(username)`,
+}

@@ -1,928 +1,797 @@
 package sqlite
 
 import (
-	"bytes"
 	"fmt"
-	"log"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/relstor"
 )
 
-var sqldb relstor.Provider
-var sqlOnce sync.Once
-
-var alice relstor.UserRecord
-var bob relstor.UserRecord
-
-const aliceVerificationToken = "0123456789abcdef"
-const bobVerificationToken = "fedcba9876543210"
-const aliceFCMToken = "an-fcm-token-from-google"
-const bobFCMToken = "an-fcm-token-for-bob"
-const aliceAPNSToken = "an-apns-token-from-apple"
-const bobAPNSToken = "an-apns-token-for-bob"
-
-var msgAB relstor.MessageRecord
-var msgBA relstor.MessageRecord
-
-func db(t *testing.T) relstor.Provider {
-	var err error
-	sqlOnce.Do(func() {
-		sqldb, err = New(InMemoryDSN)
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	if sqldb == nil {
-		t.Fatal("db was never initialized")
-	}
-
-	return sqldb
-}
-
 func newDB(t *testing.T) sqliteDB {
+	t.Helper()
+
 	db, err := New(InMemoryDSN)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return db.(sqliteDB)
 }
 
-func TestInsertUser(t *testing.T) {
-	aliceEmail := "alice@gmail.com"
-	aliceToken := aliceVerificationToken
-	aliceUsername := "alice"
-	alice = relstor.UserRecord{
-		Email:                       &aliceEmail,
+func TestEmailVerification(t *testing.T) {
+	db := newDB(t)
+
+	email := "foo@zood.xyz"
+	user := relstor.UserRecord{
+		Email:                       &email,
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
-		PasswordSalt:                []byte("salt"),
-		PublicKey:                   []byte("public key"),
-		WrappedSecretKey:            []byte("wrapped secret key"),
-		WrappedSecretKeyNonce:       []byte("wrapped secret key nonce"),
-		WrappedSymmetricKey:         []byte("wrapped symmetric key"),
-		WrappedSymmetricKeyNonce:    []byte("wrapped symmetric key nonce"),
-		Username:                    aliceUsername,
-	}
-	var err error
-	alice.ID, err = db(t).InsertUser(alice, &aliceToken)
-	if err != nil {
-		t.Fatalf("InsertUser failed: %v", err)
-	}
-	if alice.ID < 1 {
-		t.Fatalf("InsertUser returned a bad user id: %d", alice.ID)
-	}
-
-	copy, err := db(t).User(aliceUsername)
-	if err != nil {
-		t.Fatalf("User() failed: %v", err)
-	}
-
-	if copy == nil {
-		t.Fatal("user should not be nil")
-	}
-	if copy.Email != nil {
-		t.Fatal("email should be nil after user insertion")
-	}
-	if copy.PasswordHashAlgorithm != alice.PasswordHashAlgorithm {
-		t.Fatalf("%s != %s", copy.PasswordHashAlgorithm, alice.PasswordHashAlgorithm)
-	}
-	if copy.PasswordHashMemoryLimit != alice.PasswordHashMemoryLimit {
-		t.Fatalf("%d != %d", copy.PasswordHashMemoryLimit, alice.PasswordHashMemoryLimit)
-	}
-	if copy.PasswordHashOperationsLimit != alice.PasswordHashOperationsLimit {
-		t.Fatalf("%d != %d", copy.PasswordHashOperationsLimit, alice.PasswordHashOperationsLimit)
-	}
-	if !bytes.Equal(copy.PasswordSalt, alice.PasswordSalt) {
-		t.Fatal("password salt does not match")
-	}
-	if copy.Username != alice.Username {
-		t.Fatalf("%s != %s", copy.Username, alice.Username)
-	}
-	if !bytes.Equal(copy.WrappedSecretKey, alice.WrappedSecretKey) {
-		t.Fatal("wrapped secret key doesn't match")
-	}
-	if !bytes.Equal(copy.WrappedSecretKeyNonce, alice.WrappedSecretKeyNonce) {
-		t.Fatal("wrapped secret key nonce doesn't match")
-	}
-	if !bytes.Equal(copy.WrappedSymmetricKey, alice.WrappedSymmetricKey) {
-		t.Fatal("wrapped symmetric key doesn't match")
-	}
-	if !bytes.Equal(copy.WrappedSymmetricKeyNonce, alice.WrappedSymmetricKeyNonce) {
-		t.Fatal("wrapped symmetric key nonce doesn't match")
-	}
-	if copy.ID != alice.ID {
-		t.Fatalf("id %d != %d", copy.ID, alice.ID)
-	}
-	if !bytes.Equal(copy.PublicKey, alice.PublicKey) {
-		t.Fatal("public key does not match")
-	}
-
-	bobEmail := "bob@gmail.com"
-	bobToken := bobVerificationToken
-	bob = relstor.UserRecord{
-		Email:                       &bobEmail,
-		PasswordHashAlgorithm:       "argon2i13",
-		PasswordHashMemoryLimit:     16384,
-		PasswordHashOperationsLimit: 3,
-		PasswordSalt:                []byte("bob's salt"),
-		PublicKey:                   []byte("bob's public key"),
-		WrappedSecretKey:            []byte("bob's wrapped secret key"),
-		WrappedSecretKeyNonce:       []byte("bob's wrapped secret key nonce"),
-		WrappedSymmetricKey:         []byte("bob's wrapped symmetric key"),
-		WrappedSymmetricKeyNonce:    []byte("bob's wrapped symmetric key nonce"),
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
 		Username:                    "bob",
 	}
-	bob.ID, err = db(t).InsertUser(bob, &bobToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLimitedUserInfo(t *testing.T) {
-	userID, pubKey, err := db(t).LimitedUserInfo(alice.Username)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userID != alice.ID {
-		t.Fatalf("id %d != %d", userID, alice.ID)
-	}
-	if !bytes.Equal(pubKey, alice.PublicKey) {
-		t.Fatal("public key does not match")
-	}
-
-	// check how it behaves when you give it a bad username
-	userID, pubKey, err = db(t).LimitedUserInfo("notauser")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userID != 0 {
-		t.Fatal("user id should be 0")
-	}
-	if pubKey != nil {
-		t.Fatal("public key should be nil")
-	}
-}
-
-func TestLimitedUserInfoID(t *testing.T) {
-	username, pubKey, err := db(t).LimitedUserInfoID(alice.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if username != alice.Username {
-		t.Fatalf("%s != %s", username, alice.Username)
-	}
-	if !bytes.Equal(pubKey, alice.PublicKey) {
-		t.Fatal("public key does not match")
-	}
-
-	// make sure it gives not found values when you give an invalid id
-	username, pubKey, err = db(t).LimitedUserInfoID(-1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if username != "" {
-		t.Fatalf("Should have received an empty username. Got '%s'", username)
-	}
-	if pubKey != nil {
-		t.Fatal("public key should be nil")
-	}
-}
-
-func TestGetUsername(t *testing.T) {
-	username := db(t).Username(alice.ID)
-	if username != alice.Username {
-		t.Fatalf("%s != %s", username, alice.Username)
-	}
-
-	username = db(t).Username(-1)
-	if username != "" {
-		t.Fatalf("username should be empty. is %s", username)
-	}
-}
-
-func TestUsernameAvailable(t *testing.T) {
-	available, err := db(t).UsernameAvailable(alice.Username)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if available {
-		t.Fatal("username should NOT be available")
-	}
-
-	available, err = db(t).UsernameAvailable("abbiedoobie")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !available {
-		t.Fatal("username SHOULD be available")
-	}
-}
-
-func TestUserPublicKey(t *testing.T) {
-	pubKey, err := db(t).UserPublicKey(alice.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(pubKey, alice.PublicKey) {
-		t.Fatal("public key does not match")
-	}
-
-	// test the bad case
-	pubKey, err = db(t).UserPublicKey(-1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pubKey != nil {
-		t.Fatal("public key should be nil")
-	}
-}
-
-func TestInsertMessage(t *testing.T) {
-	msgAB = relstor.MessageRecord{
-		RecipientID: bob.ID,
-		SenderID:    alice.ID,
-		CipherText:  []byte("Alice to Bob cipher text"),
-		Nonce:       []byte("Alice to Bob nonce"),
-		SentDate:    time.Now().Unix(),
-	}
+	verificationToken := "some-secret-token-used-for-verification"
 
 	var err error
-	msgAB.ID, err = db(t).InsertMessage(msgAB.RecipientID, msgAB.SenderID, msgAB.CipherText, msgAB.Nonce, msgAB.SentDate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if msgAB.ID < 1 {
-		t.Fatal("bad id for msg from alice to bob")
-	}
+	user.ID, err = db.InsertUser(user, &verificationToken)
+	require.NoError(t, err)
+	require.Greater(t, user.ID, int64(0))
 
-	msgBA = relstor.MessageRecord{
-		RecipientID: alice.ID,
-		SenderID:    bob.ID,
-		CipherText:  []byte("Bob to Alice cipher text"),
-		Nonce:       []byte("Bob to Alice nonce"),
-		SentDate:    time.Now().Unix(),
-	}
+	tokenRecord, err := db.EmailVerificationTokenRecord(verificationToken)
+	require.NoError(t, err)
+	require.NotNil(t, tokenRecord)
+	require.Equal(t, tokenRecord.Email, email)
+	require.Equal(t, verificationToken, tokenRecord.Token)
+	require.Equal(t, user.ID, tokenRecord.UserID)
+	// make sure the send date is within the last 5 seconds
+	require.LessOrEqual(t, tokenRecord.SendDate, time.Now().Unix())
+	require.Greater(t, tokenRecord.SendDate, time.Now().Unix()-5)
 
-	msgBA.ID, err = db(t).InsertMessage(msgBA.RecipientID, msgBA.SenderID, msgBA.CipherText, msgBA.Nonce, msgBA.SentDate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if msgBA.ID < 1 {
-		t.Fatal("bad if ro msg from bob to alice")
-	}
-}
+	// using a bad user id
+	err = db.VerifyEmail(email, 5000)
+	require.NoError(t, err)
 
-func TestMessageToRecipient(t *testing.T) {
-	// test the bad case
-	copy, err := db(t).MessageToRecipient(alice.ID, msgAB.ID) // incorrect message id
-	if err != nil {
-		t.Fatal(err)
-	}
-	if copy != nil {
-		t.Fatal("msg should be nil")
-	}
+	// the verification token record should still exist
+	tr2, err := db.EmailVerificationTokenRecord(verificationToken)
+	require.NoError(t, err)
+	require.Equal(t, tokenRecord, tr2)
 
-	// test the good case
-	copy, err = db(t).MessageToRecipient(alice.ID, msgBA.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if copy == nil {
-		t.Fatal("msg came back nil")
-	}
-	if copy.ID != msgBA.ID {
-		t.Fatalf("msg id %d != %d", copy.ID, msgBA.ID)
-	}
-	if copy.RecipientID != msgBA.RecipientID {
-		t.Fatalf("recip id %d != %d", copy.RecipientID, msgBA.RecipientID)
-	}
-	if copy.SenderID != msgBA.SenderID {
-		t.Fatalf("sender id %d != %d", copy.SenderID, msgBA.SenderID)
-	}
-	if copy.SentDate != msgBA.SentDate {
-		t.Fatalf("sent date %d != %d", copy.SentDate, msgBA.SentDate)
-	}
-	if !bytes.Equal(copy.CipherText, msgBA.CipherText) {
-		t.Fatal("cipher text is not equal")
-	}
-	if !bytes.Equal(copy.Nonce, msgBA.Nonce) {
-		t.Fatal("nonce is not equal")
-	}
-}
+	// use the correct user id this time
+	err = db.VerifyEmail(email, user.ID)
+	require.NoError(t, err)
 
-func TestMessageRecords(t *testing.T) {
-	msgs, err := db(t).MessageRecords(bob.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("Expecting 1 message, but found %d", len(msgs))
-	}
-	copy := msgs[0]
-	if copy.ID != msgAB.ID {
-		t.Fatalf("msg id %d != %d", copy.ID, msgAB.ID)
-	}
-	if copy.RecipientID != msgAB.RecipientID {
-		t.Fatalf("recip id %d != %d", copy.RecipientID, msgAB.RecipientID)
-	}
-	if copy.SenderID != msgAB.SenderID {
-		t.Fatalf("sender id %d != %d", copy.SenderID, msgAB.SenderID)
-	}
-	if copy.SentDate != msgAB.SentDate {
-		t.Fatalf("sent date %d != %d", copy.SentDate, msgAB.SentDate)
-	}
-	if !bytes.Equal(copy.CipherText, msgAB.CipherText) {
-		t.Fatal("cipher text is not equal")
-	}
-	if !bytes.Equal(copy.Nonce, msgAB.Nonce) {
-		t.Fatal("nonce is not equal")
-	}
-}
+	// the verification token record should be gone
+	tr2, err = db.EmailVerificationTokenRecord(verificationToken)
+	require.NoError(t, err)
+	require.Nil(t, tr2)
 
-func TestEmailVerificationTokenRecord(t *testing.T) {
-	record, err := db(t).EmailVerificationTokenRecord(aliceVerificationToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatal("email verification token record is nil")
-	}
-	if record.Email != *alice.Email {
-		t.Fatalf("%s != %s", record.Email, *alice.Email)
-	}
-	if record.SendDate == 0 {
-		t.Fatal("A send date was not created for the email verification token record")
-	}
-	if record.Token != aliceVerificationToken {
-		t.Fatalf("token mismatch: %s != %s", record.Token, aliceVerificationToken)
-	}
-	if record.UserID != alice.ID {
-		t.Fatalf("user id mismatch: %d != %d", record.UserID, alice.ID)
-	}
-
-	// test the bad case
-	record, err = db(t).EmailVerificationTokenRecord("deadbeef")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatal("email verification token record should be nil")
-	}
-}
-
-func TestVerifyEmail(t *testing.T) {
-	err := db(t).VerifyEmail(*alice.Email, alice.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	user, err := db(t).User(alice.Username)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if user.Email == nil {
-		t.Fatal("email is still nil after verification")
-	}
-	if *user.Email != *alice.Email {
-		t.Fatalf("email does not match after verification: %s != %s", *user.Email, *alice.Email)
-	}
-
-	// make sure the verification record is no longer present
-	record, err := db(t).EmailVerificationTokenRecord(aliceVerificationToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("received a record, when it should have been nil: %+v", record)
-	}
+	// the user record should now contain an emailaddress
+	user.Email = &email
+	actual, err := db.User(user.Username)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.Equal(t, user, *actual)
 }
 
 func TestDisavowEmail(t *testing.T) {
-	// Bob will disavow the email address
-	err := db(t).DisavowEmail(bobVerificationToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
 
-	// the email verification record should no longer be present
-	record, err := db(t).EmailVerificationTokenRecord(bobVerificationToken)
-	if err != nil {
-		t.Fatal(err)
+	email := "foo@zood.xyz"
+	user := relstor.UserRecord{
+		Email:                       &email,
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "bob",
 	}
-	if record != nil {
-		t.Fatalf("email verification token record should not exist after disavowing email. found %+v", record)
-	}
+	verificationToken := "some-secret-token-used-for-verification"
+	var err error
+	user.ID, err = db.InsertUser(user, &verificationToken)
+	require.NoError(t, err)
+
+	err = db.DisavowEmail("not-a-valid-token")
+	require.NoError(t, err)
+
+	// the token record should still exist
+	tr, err := db.EmailVerificationTokenRecord(verificationToken)
+	require.NoError(t, err)
+	require.NotNil(t, tr)
+	require.Equal(t, verificationToken, tr.Token)
+
+	err = db.DisavowEmail(verificationToken)
+	require.NoError(t, err)
+
+	// make sure the token record is gone
+	tr, err = db.EmailVerificationTokenRecord(verificationToken)
+	require.NoError(t, err)
+	require.Nil(t, tr)
 }
 
-func TestDeleteMessageToRecipient(t *testing.T) {
-	err := db(t).DeleteMessageToRecipient(alice.ID, msgBA.ID)
-	if err != nil {
-		t.Fatal(err)
+func TestMessagesPart1(t *testing.T) {
+	db := newDB(t)
+
+	msgs, err := db.MessageRecords(3)
+	require.NoError(t, err)
+	require.Empty(t, msgs)
+
+	expected := relstor.MessageRecord{
+		RecipientID: 2,
+		SenderID:    3,
+		CipherText:  []byte("cipher-text"),
+		Nonce:       []byte("nonce"),
+		SentDate:    19495478,
 	}
 
-	// make sure the message no longer exists in the database
-	msg, err := db(t).MessageToRecipient(alice.ID, msgBA.ID)
-	if err != nil {
-		t.Fatal(err)
+	expected.ID, err = db.InsertMessage(expected.RecipientID, expected.SenderID, expected.CipherText, expected.Nonce, expected.SentDate)
+	require.NoError(t, err)
+	require.Greater(t, expected.ID, int64(0))
+
+	msgs, err = db.MessageRecords(expected.RecipientID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, expected, msgs[0])
+}
+
+func TestMessagesPart2(t *testing.T) {
+	db := newDB(t)
+
+	actual, err := db.MessageToRecipient(3, 5)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	expected := relstor.MessageRecord{
+		RecipientID: 2,
+		SenderID:    3,
+		CipherText:  []byte("cipher-text"),
+		Nonce:       []byte("nonce"),
+		SentDate:    19495478,
 	}
-	if msg != nil {
-		t.Fatalf("message should have been nil after deleting. found %+v", msg)
+
+	expected.ID, err = db.InsertMessage(expected.RecipientID, expected.SenderID, expected.CipherText, expected.Nonce, expected.SentDate)
+	require.NoError(t, err)
+	require.Greater(t, expected.ID, int64(0))
+
+	// wrong message id
+	actual, err = db.MessageToRecipient(expected.RecipientID, 5000)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	// wrong recipient
+	actual, err = db.MessageToRecipient(5000, expected.ID)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	actual, err = db.MessageToRecipient(expected.RecipientID, expected.ID)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.Equal(t, expected, *actual)
+
+	// try deleting in various ways
+	// wrong message id
+	err = db.DeleteMessageToRecipient(expected.RecipientID, 5000)
+	require.NoError(t, err)
+	actual, _ = db.MessageToRecipient(expected.RecipientID, expected.ID)
+	require.NotNil(t, actual, "Expcted the message to still exist after a bad delete call")
+	require.Equal(t, expected, *actual, "expected the message to still match after a bad delete call")
+
+	// wrong recipient id
+	err = db.DeleteMessageToRecipient(5000, expected.ID)
+	require.NoError(t, err)
+	actual, _ = db.MessageToRecipient(expected.RecipientID, expected.ID)
+	require.NotNil(t, actual, "Expcted the message to still exist after a bad delete call")
+	require.Equal(t, expected, *actual, "expected the message to still match after a bad delete call")
+
+	// proper deletion
+	err = db.DeleteMessageToRecipient(expected.RecipientID, expected.ID)
+	require.NoError(t, err)
+	// the message should actually be gone now
+	actual, err = db.MessageToRecipient(expected.RecipientID, expected.ID)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+}
+
+func TestInsertUser2(t *testing.T) {
+	u := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "alice",
 	}
+	db := newDB(t)
+	var err error
+	u.ID, err = db.InsertUser(u, nil)
+	require.NoError(t, err)
+	require.Greater(t, u.ID, int64(0))
+
+	// make sure a user with the same username can't be inserted
+	_, err = db.InsertUser(u, nil)
+	require.Equal(t, relstor.ErrDuplicateUsername, err)
+
+	// make sure we retrieve the same user back
+	actual, err := db.User(u.Username)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.Equal(t, u, *actual)
+
+	// make sure searching for a non-existent user gives us an appropriate error
+	actual, err = db.User("eve")
+	require.NoError(t, err)
+	require.Nil(t, actual)
+}
+
+func TestLimitedUserInfo(t *testing.T) {
+	db := newDB(t)
+	id, pubKey, err := db.LimitedUserInfo("invalid")
+	require.NoError(t, err)
+	require.Zero(t, id)
+	require.Nil(t, pubKey)
+
+	user := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "alice",
+	}
+
+	user.ID, err = db.InsertUser(user, nil)
+	require.NoError(t, err)
+
+	id, pubKey, err = db.LimitedUserInfo(user.Username)
+	require.NoError(t, err)
+	require.Equal(t, user.ID, id)
+	require.Equal(t, user.PublicKey, pubKey)
+}
+
+func TestLimitedUserInfoID(t *testing.T) {
+	db := newDB(t)
+	username, pubKey, err := db.LimitedUserInfoID(1)
+	require.NoError(t, err)
+	require.Empty(t, username)
+	require.Nil(t, pubKey)
+
+	user := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "alice",
+	}
+
+	user.ID, err = db.InsertUser(user, nil)
+	require.NoError(t, err)
+
+	username, pubKey, err = db.LimitedUserInfoID(user.ID)
+	require.NoError(t, err)
+	require.Equal(t, user.Username, username)
+	require.Equal(t, user.PublicKey, pubKey)
+}
+
+func TestUsername(t *testing.T) {
+	db := newDB(t)
+	actual := db.Username(33491)
+	require.Empty(t, actual)
+
+	user := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "alice",
+	}
+	var err error
+	user.ID, err = db.InsertUser(user, nil)
+	require.NoError(t, err)
+
+	actual = db.Username(user.ID)
+	require.Equal(t, user.Username, actual)
+}
+
+func TestUsernameAvailable(t *testing.T) {
+	db := newDB(t)
+	username := "alice"
+	available, err := db.UsernameAvailable(username)
+	require.NoError(t, err)
+	require.True(t, available)
+
+	user := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    username,
+	}
+	user.ID, err = db.InsertUser(user, nil)
+	require.NoError(t, err)
+
+	available, err = db.UsernameAvailable(username)
+	require.NoError(t, err)
+	require.False(t, available)
+}
+
+func TestUserPublicKey(t *testing.T) {
+	db := newDB(t)
+	actual, err := db.UserPublicKey(2)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	user := relstor.UserRecord{
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "alice",
+	}
+
+	user.ID, err = db.InsertUser(user, nil)
+	require.NoError(t, err)
+
+	actual, err = db.UserPublicKey(user.ID)
+	require.NoError(t, err)
+	require.Equal(t, user.PublicKey, actual)
 }
 
 func TestSessionChallenge(t *testing.T) {
-	challenge := []byte("this is a challenge")
-	creationDate := time.Now().Unix()
-	err := db(t).InsertSessionChallenge(alice.ID, creationDate, challenge)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
 
-	scRec, err := db(t).SessionChallenge(alice.ID)
-	if err != nil {
-		t.Fatal(err)
+	expected := relstor.SessionChallengeRecord{
+		Challenge:    []byte("challenge-all-the-things"),
+		CreationDate: time.Now().Unix(),
+		UserID:       32,
 	}
-	if scRec == nil {
-		t.Fatalf("session challenge record is nil")
-	}
-	if scRec.ID < 1 {
-		t.Fatalf("Invalid id. Found: %d", scRec.ID)
-	}
-	if scRec.UserID != alice.ID {
-		t.Fatalf("Mismatched user id: %d != %d", scRec.UserID, alice.ID)
-	}
-	if scRec.CreationDate != creationDate {
-		t.Fatalf("Incorrect creationDate: %d != %d", scRec.CreationDate, creationDate)
-	}
-	if !bytes.Equal(challenge, scRec.Challenge) {
-		t.Fatalf("challenge doesn't match")
-	}
+	err := db.InsertSessionChallenge(expected.UserID, expected.CreationDate, expected.Challenge)
+	require.NoError(t, err)
 
-	err = db(t).DeleteSessionChallengeUser(alice.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	actual, err := db.SessionChallenge(expected.UserID)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.NotZero(t, actual.ID)
+	expected.ID = actual.ID
+	require.Equal(t, expected, *actual)
 
-	// try to receive the challenge. It should be gone.
-	scRec, err = db(t).SessionChallenge(alice.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if scRec != nil {
-		t.Fatalf("The session challenge should not exist. Found %+v", scRec)
-	}
+	// delete it with a bad user id
+	err = db.DeleteSessionChallengeUser(5000)
+	require.NoError(t, err)
+	// it should still be there
+	actual, err = db.SessionChallenge(expected.UserID)
+	require.NoError(t, err)
+	require.Equal(t, expected, *actual)
+
+	// delete it with the correct user id
+	err = db.DeleteSessionChallengeUser(expected.UserID)
+	require.NoError(t, err)
+	// the challenge should not be there anymore
+	actual, err = db.SessionChallenge(expected.UserID)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestDeleteSessionChallengeID(t *testing.T) {
-	challenge := []byte("a different challenge")
-	creationDate := time.Now().Unix()
-	err := db(t).InsertSessionChallenge(bob.ID, creationDate, challenge)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
 
-	// retrieve the challenge
-	scRec, err := db(t).SessionChallenge(bob.ID)
-	if err != nil {
-		t.Fatal(err)
+	expected := relstor.SessionChallengeRecord{
+		Challenge:    []byte("challenge-all-the-things"),
+		CreationDate: time.Now().Unix(),
+		UserID:       32,
 	}
-	if scRec == nil {
-		t.Fatal("challenge is missing after insertion")
-	}
+	err := db.InsertSessionChallenge(expected.UserID, expected.CreationDate, expected.Challenge)
+	require.NoError(t, err)
 
-	// now delete it
-	err = db(t).DeleteSessionChallengeID(scRec.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// delete it with a bad id
+	err = db.DeleteSessionChallengeID(5000)
+	require.NoError(t, err)
+	// the challenge should still be there
+	actual, err := db.SessionChallenge(expected.UserID)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	expected.ID = actual.ID
+	require.Equal(t, expected, *actual)
 
-	// retrieving the challenge should fail
-	scRec, err = db(t).SessionChallenge(bob.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if scRec != nil {
-		t.Fatalf("Deleting session challenge failed. Still got %+v in return.", scRec)
-	}
+	// delete it with the correct challenge id
+	err = db.DeleteSessionChallengeID(expected.ID)
+	require.NoError(t, err)
+	// the challenge should be gone
+	actual, err = db.SessionChallenge(expected.UserID)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestInsertAndGetFCMToken(t *testing.T) {
-	err := db(t).InsertFCMToken(alice.ID, aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
 
-	// now try to retrieve it
-	record, err := db(t).FCMToken(aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatalf("Unable to retrieve FCM token")
-	}
-	if record.ID < 1 {
-		t.Fatalf("Invalid id for FCM token record: %d", record.ID)
-	}
-	if record.Token != aliceFCMToken {
-		t.Fatalf("Token does not match: %s != %s", record.Token, aliceFCMToken)
-	}
-	if record.UserID != alice.ID {
-		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
-	}
+	userID := int64(14)
+	fcmToken := "an-fcm-token-from-google"
+	err := db.InsertFCMToken(userID, fcmToken)
+	require.NoError(t, err)
 
-	// now try to retrieve it another way
-	record, err = db(t).FCMTokenUser(alice.ID, aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatalf("Unable to retrieve FCM token")
-	}
-	if record.ID < 1 {
-		t.Fatalf("Invalid id for FCM token record: %d", record.ID)
-	}
-	if record.Token != aliceFCMToken {
-		t.Fatalf("Token does not match: %s != %s", record.Token, aliceFCMToken)
-	}
-	if record.UserID != alice.ID {
-		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
-	}
-}
+	// try to retrieve it
+	actual, err := db.FCMToken(fcmToken)
+	require.NoError(t, err)
+	require.Equal(t, userID, actual.UserID)
+	require.Equal(t, fcmToken, actual.Token)
+	require.NotZero(t, actual.ID)
 
-func TestGetFCMTokenInvalid(t *testing.T) {
-	token := "not-a-real-token"
-	record, err := db(t).FCMToken(token)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("Should not have received a record. Got %+v", record)
-	}
+	// provide a bad token
+	actual, err = db.FCMToken("bad-token")
+	require.NoError(t, err)
+	require.Nil(t, actual)
 
-	// Bob's user id, but alice's token
-	record, err = db(t).FCMTokenUser(bob.ID, aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("Should not have received a record. Got %+v", record)
-	}
+	// try to receive another way
+	actual, err = db.FCMTokenUser(userID, fcmToken)
+	require.NoError(t, err)
+	require.Equal(t, userID, actual.UserID)
+	require.Equal(t, fcmToken, actual.Token)
+	require.NotZero(t, actual.ID)
+
+	// try with a bad token
+	actual, err = db.FCMTokenUser(5000, "bad-token")
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestUpdateUserIDofFCMToken(t *testing.T) {
-	// Alice has logged out of her phone, and Bob has logged in, thus taking over the device's FCM token
-	err := db(t).UpdateUserIDOfFCMToken(bob.ID, aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
+	oldUserID := int64(12)
+	token := "the-fcm-token"
+	err := db.InsertFCMToken(oldUserID, token)
+	require.NoError(t, err)
 
-	// make sure we get the correct record now when we retrieve it
-	record, err := db(t).FCMToken(aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatal("FCM token record should not be nil")
-	}
-	if record.Token != aliceFCMToken {
-		t.Fatalf("token mismatch: %s != %s", record.Token, aliceFCMToken)
-	}
-	if record.UserID != bob.ID {
-		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
-	}
+	// the 'old user' has logged out of the phone, and a 'new user' has logged in, thus taking over the device's FCM token
+	newUserID := int64(23)
+	err = db.UpdateUserIDOfFCMToken(newUserID, token)
+	require.NoError(t, err)
+
+	// make sure we get the correct record
+	actual, err := db.FCMToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.NotZero(t, actual.ID)
+	require.Equal(t, newUserID, actual.UserID)
+	require.Equal(t, token, actual.Token)
 }
 
 func TestReplaceFCMToken(t *testing.T) {
-	// Now that Bob has logged in to the device, time has passed and his FCM token has been updated
-	rowsAffected, err := db(t).ReplaceFCMToken(aliceFCMToken, bobFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rowsAffected != 1 {
-		t.Fatalf("Rows affected was not 1. Was %d", rowsAffected)
-	}
+	db := newDB(t)
+	userID := int64(31)
+	oldToken := "old-token"
+	err := db.InsertFCMToken(userID, oldToken)
+	require.NoError(t, err)
 
-	// make sure we get the correct record when retrieving it
-	record, err := db(t).FCMToken(bobFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatal("FCM token record should not be nil")
-	}
-	if record.Token != bobFCMToken {
-		t.Fatalf("token mismatch: %s != %s", record.Token, aliceFCMToken)
-	}
-	if record.UserID != bob.ID {
-		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
-	}
+	// update FCM token of a user
+	newToken := "new-token"
+	rowsAffected, err := db.ReplaceFCMToken(oldToken, newToken)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rowsAffected)
+
+	// make sure we get the correct record
+	actual, err := db.FCMToken(newToken)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.NotZero(t, actual.ID)
+	require.Equal(t, userID, actual.UserID)
+	require.Equal(t, newToken, actual.Token)
 }
 
 func TestDeleteFCMTokenOfUser(t *testing.T) {
-	err := db(t).DeleteFCMTokenOfUser(bob.ID, bobFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
+	userID := int64(78)
+	token := "fcm-token"
+	err := db.InsertFCMToken(userID, token)
+	require.NoError(t, err)
 
-	// make sure it can't be retrieved
-	record, err := db(t).FCMToken(bobFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("FCM token should be nil. Found %+v", record)
-	}
+	// delete with a bad user id
+	err = db.DeleteFCMTokenOfUser(5000, token)
+	require.NoError(t, err)
+
+	// make sure it's still there
+	actual, err := db.FCMToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	// delete with a bad token
+	err = db.DeleteFCMTokenOfUser(userID, "bad-token")
+	require.NoError(t, err)
+
+	// make sure it's still there
+	actual, err = db.FCMToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	// delete with correct arguments
+	err = db.DeleteFCMTokenOfUser(userID, token)
+	require.NoError(t, err)
+
+	// make sure it's not there
+	actual, err = db.FCMToken(token)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestDeleteFCMToken(t *testing.T) {
-	// insert a token for alice, then delete it
-	err := db(t).InsertFCMToken(alice.ID, aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
+	userID := int64(11)
+	token := "fcm-token"
 
-	err = db(t).DeleteFCMToken(aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	err := db.InsertFCMToken(userID, token)
+	require.NoError(t, err)
 
-	// we should not be able to retrieve the token record anymore
-	record, err := db(t).FCMToken(aliceFCMToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("FCM token should be nil. Found %+v", record)
-	}
+	// delete by specifying a bad token
+	err = db.DeleteFCMToken("bad-token")
+	require.NoError(t, err)
+
+	// the token should still be there
+	actual, err := db.FCMToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	err = db.DeleteFCMToken(token)
+	require.NoError(t, err)
+
+	// the token should be gone
+	actual, err = db.FCMToken(token)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestFCMTokensRaw(t *testing.T) {
 	// add a bunch of tokens for a new fictitious user
+	db := newDB(t)
 	numTokens := 8
-	var userID int64 = 100
+	userID := int64(4)
 	for i := 0; i < numTokens; i++ {
-		db(t).InsertFCMToken(userID, fmt.Sprintf("token-deadbeef-%d", i))
+		err := db.InsertFCMToken(userID, fmt.Sprintf("token-deadbeef-%d", i))
+		require.NoError(t, err)
 	}
 
-	tokens, err := db(t).FCMTokensRaw(100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tokens) != numTokens {
-		t.Fatalf("Only found %d tokens. Expecting %d.", len(tokens), numTokens)
-	}
+	tokens, err := db.FCMTokensRaw(userID)
+	require.NoError(t, err)
+	require.Len(t, tokens, numTokens)
 }
 
-// // // // // // // ---------------------------------
-
-// ------------------------------------------------------
 func TestInsertAndGetAPNSToken(t *testing.T) {
-	err := db(t).InsertAPNSToken(alice.ID, aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
+	userID := int64(8)
+	token := "apns-token"
+	err := db.InsertAPNSToken(userID, token)
+	require.NoError(t, err)
 
-	// now try to retrieve it
-	record, err := db(t).APNSToken(aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatalf("Unable to retrieve APNS token")
-	}
-	if record.ID < 1 {
-		t.Fatalf("Invalid id for APNS token record: %d", record.ID)
-	}
-	if record.Token != aliceAPNSToken {
-		t.Fatalf("Token does not match: %s != %s", record.Token, aliceAPNSToken)
-	}
-	if record.UserID != alice.ID {
-		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
-	}
+	// retrieve it
+	actual, err := db.APNSToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.NotZero(t, actual.ID)
+	require.Equal(t, userID, actual.UserID)
+	require.Equal(t, token, actual.Token)
 
-	// now try to retrieve it another way
-	record, err = db(t).APNSTokenUser(alice.ID, aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatalf("Unable to retrieve APNS token")
-	}
-	if record.ID < 1 {
-		t.Fatalf("Invalid id for APNS token record: %d", record.ID)
-	}
-	if record.Token != aliceAPNSToken {
-		t.Fatalf("Token does not match: %s != %s", record.Token, aliceAPNSToken)
-	}
-	if record.UserID != alice.ID {
-		t.Fatalf("User id does not match: %d != %d", record.UserID, alice.ID)
-	}
+	// retrieve with a bad token argument
+	actual, err = db.APNSToken("bad-token")
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	// retrieve it another way
+	actual, err = db.APNSTokenUser(userID, token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.NotZero(t, actual.ID)
+	require.Equal(t, userID, actual.UserID)
+	require.Equal(t, token, actual.Token)
+
+	// retrieve it with a bad user id
+	actual, err = db.APNSTokenUser(5000, token)
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	// retrieve it with a bad token
+	actual, err = db.APNSTokenUser(userID, "bad-token")
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
-func TestGetAPNSTokenInvalid(t *testing.T) {
-	token := "not-a-real-token"
-	record, err := db(t).APNSToken(token)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("Should not have received a record. Got %+v", record)
-	}
+func TestUpdateUserIDOfAPNSToken(t *testing.T) {
+	// the old user has logged out of their phone, and the new user has logged in, thus taking over the device's FCM token
+	db := newDB(t)
 
-	// Bob's user id, but alice's token
-	record, err = db(t).APNSTokenUser(bob.ID, aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("Should not have received a record. Got %+v", record)
-	}
-}
+	oldUserID := int64(6)
+	token := "apns-token"
+	err := db.InsertAPNSToken(oldUserID, token)
+	require.NoError(t, err)
 
-func TestUpdateUserIDofAPNSToken(t *testing.T) {
-	// Alice has logged out of her phone, and Bob has logged in, thus taking over the device's FCM token
-	err := db(t).UpdateUserIDOfAPNSToken(bob.ID, aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	newUserID := int64(9)
+	err = db.UpdateUserIDOfAPNSToken(newUserID, token)
+	require.NoError(t, err)
 
-	// make sure we get the correct record now when we retrieve it
-	record, err := db(t).APNSToken(aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatal("APNS token record should not be nil")
-	}
-	if record.Token != aliceAPNSToken {
-		t.Fatalf("token mismatch: %s != %s", record.Token, aliceAPNSToken)
-	}
-	if record.UserID != bob.ID {
-		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
-	}
+	actual, err := db.APNSToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.Equal(t, newUserID, actual.UserID)
+	require.Equal(t, token, actual.Token)
 }
 
 func TestReplaceAPNSToken(t *testing.T) {
-	// Now that Bob has logged in to the device, time has passed and his APNS token has been updated
-	rowsAffected, err := db(t).ReplaceAPNSToken(aliceAPNSToken, bobAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rowsAffected != 1 {
-		t.Fatalf("Rows affected was not 1. Was %d", rowsAffected)
-	}
+	db := newDB(t)
 
-	// make sure we get the correct record when retrieving it
-	record, err := db(t).APNSToken(bobAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record == nil {
-		t.Fatal("APNS token record should not be nil")
-	}
-	if record.Token != bobAPNSToken {
-		t.Fatalf("token mismatch: %s != %s", record.Token, aliceAPNSToken)
-	}
-	if record.UserID != bob.ID {
-		t.Fatalf("user id mismatch: %d != %d", record.UserID, bob.ID)
-	}
+	oldToken := "old-apns-token"
+	userID := int64(12)
+	err := db.InsertAPNSToken(userID, oldToken)
+	require.NoError(t, err)
+
+	// the APNS token has been updated on the device
+	newToken := "new-apns-token"
+	rowsAffected, err := db.ReplaceAPNSToken(oldToken, newToken)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rowsAffected)
+
+	// make sure we get the correct record
+	actual, err := db.APNSToken(newToken)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+	require.Equal(t, newToken, actual.Token)
+	require.Equal(t, userID, actual.UserID)
 }
 
-func TestDeleteAPNSTokenOfUser(t *testing.T) {
-	err := db(t).DeleteAPNSTokenOfUser(bob.ID, bobAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestDeleteAPNSTokensOfUser(t *testing.T) {
+	db := newDB(t)
 
-	// make sure it can't be retrieved
-	record, err := db(t).APNSToken(bobAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("APNS token should be nil. Found %+v", record)
-	}
+	userID := int64(4)
+	token := "apns-token"
+	err := db.InsertAPNSToken(userID, token)
+	require.NoError(t, err)
+
+	// delete with a bad user id
+	err = db.DeleteAPNSTokenOfUser(5000, token)
+	require.NoError(t, err)
+
+	// make sure it's still there
+	actual, err := db.APNSToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	// delete with a bad token
+	err = db.DeleteAPNSTokenOfUser(userID, "bad-token")
+	require.NoError(t, err)
+
+	// make sure it's still there
+	actual, err = db.APNSToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	// delete with good arguments
+	err = db.DeleteAPNSTokenOfUser(userID, token)
+	require.NoError(t, err)
+
+	// make sure it's gone
+	actual, err = db.APNSToken(token)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestDeleteAPNSToken(t *testing.T) {
-	// insert a token for alice, then delete it
-	err := db(t).InsertAPNSToken(alice.ID, aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := newDB(t)
 
-	err = db(t).DeleteAPNSToken(aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
+	userID := int64(2)
+	token := "apns-token"
+	err := db.InsertAPNSToken(userID, token)
+	require.NoError(t, err)
 
-	// we should not be able to retrieve the token record anymore
-	record, err := db(t).APNSToken(aliceAPNSToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record != nil {
-		t.Fatalf("APNS token should be nil. Found %+v", record)
-	}
+	// delete with a bad token
+	err = db.DeleteAPNSToken("bad-token")
+	require.NoError(t, err)
+
+	// make sure it's still there
+	actual, err := db.APNSToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, actual)
+
+	// delete it properly
+	err = db.DeleteAPNSToken(token)
+	require.NoError(t, err)
+
+	// make sure it's gone
+	actual, err = db.APNSToken(token)
+	require.NoError(t, err)
+	require.Nil(t, actual)
 }
 
 func TestAPNSTokensRaw(t *testing.T) {
 	db := newDB(t)
 
 	tokens, err := db.APNSTokensRaw(100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tokens) != 0 {
-		t.Fatalf("Expected 0 tokens. Found %d", len(tokens))
-	}
+	require.NoError(t, err)
+	require.Empty(t, tokens)
 
 	// add a bunch of tokens for a new fictitious user
 	numTokens := 8
 	var userID int64 = 100
 	for i := 0; i < numTokens; i++ {
-		db.InsertAPNSToken(userID, fmt.Sprintf("token-livebeef-%d", i))
+		err := db.InsertAPNSToken(userID, fmt.Sprintf("token-livebeef-%d", i))
+		require.NoError(t, err)
 	}
 
-	tokens, err = db.APNSTokensRaw(100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tokens) != numTokens {
-		t.Fatalf("Only found %d tokens. Expecting %d.", len(tokens), numTokens)
-	}
+	tokens, err = db.APNSTokensRaw(userID)
+	require.NoError(t, err)
+	require.Len(t, tokens, numTokens)
 }
 
 func TestTickets(t *testing.T) {
 	db := newDB(t)
+
+	// make sure we don't get a ticket from an empty db
 	userID, timestamp, err := db.Ticket("deadbeef")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userID != 0 {
-		t.Fatalf("Expected 0, got %d", userID)
-	}
-	if timestamp != 0 {
-		t.Fatalf("Expected 0, got %d", timestamp)
-	}
+	require.NoError(t, err)
+	require.Zero(t, userID)
+	require.Zero(t, timestamp)
 
 	ticket := "boppity-bop"
 	var expectedID int64 = 42
 	err = db.InsertTicket(ticket, expectedID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	userID, timestamp, err = db.Ticket(ticket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	log.Printf("ticket timestamp is %d", timestamp)
-	if userID != expectedID {
-		t.Fatalf("user id mismatch: %d != %d", userID, expectedID)
-	}
+	require.NoError(t, err)
+	require.Equal(t, expectedID, userID)
 	// the timestamp shouldn't be older than 1 second ago
 	now := time.Now().Unix()
-	if timestamp < now-1 {
-		t.Fatalf("timestamp is too old. It's %d, but currently %d", timestamp, now)
-	}
+	require.Greater(t, timestamp, now-1)
 	// the timestamp shouldn't be in the future either
-	if timestamp > now {
-		t.Fatalf("timestamp is in the future. It's %d, currently %d", timestamp, now)
-	}
+	require.LessOrEqual(t, timestamp, now)
 
 	// test ticket deletion
-	if err = db.DeleteTickets(now - 5); err != nil {
-		t.Fatal(err)
-	}
+	err = db.DeleteTickets(now - 5)
+	require.NoError(t, err)
 
 	// the ticket should still be in the database
 	userID, _, err = db.Ticket(ticket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userID != expectedID {
-		t.Fatalf("user id mismatch: %d != %d", userID, expectedID)
-	}
+	require.NoError(t, err)
+	require.Equal(t, expectedID, userID)
 
 	// perform a delete that SHOULD delete our ticket
-	if err = db.DeleteTickets(now); err != nil {
-		t.Fatal(err)
-	}
+	err = db.DeleteTickets(now)
+	require.NoError(t, err)
 
+	// make sure the ticket no longer exists
 	userID, timestamp, err = db.Ticket(ticket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if userID != 0 {
-		t.Fatalf("Ticket was found. Got userid %d", userID)
-	}
-	if timestamp != 0 {
-		t.Fatalf("Timestamp was found. Got timestamp %d", timestamp)
-	}
+	require.NoError(t, err)
+	require.Zero(t, userID)
+	require.Zero(t, timestamp)
 }

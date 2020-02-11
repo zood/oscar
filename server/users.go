@@ -161,7 +161,7 @@ func createUser(db relstor.Provider, kvs kvstor.Provider, emailer smtp.SendEmail
 		}
 
 		// everything looks good, so let's generate a verification token
-		token := base62.Rand(16) // randBase62(16)
+		token := base62.Rand(16)
 		emailVerificationToken = &token
 	}
 

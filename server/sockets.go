@@ -77,6 +77,7 @@ func (ss socketServer) start() {
 	ss.messages = messagesPubSub.Sub(ss.userID)
 	go ss.readConn()
 	go ss.writeConn()
+	go ss.stop()
 }
 
 func (ss socketServer) stop() {

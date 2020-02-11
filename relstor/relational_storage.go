@@ -1,5 +1,9 @@
 package relstor
 
+import "errors"
+
+var ErrDuplicateUsername = errors.New("a user with that username already exists")
+
 // APNSTokenRecord represents a row in the user_apns_tokens table
 type APNSTokenRecord struct {
 	ID     int64  `db:"id"`

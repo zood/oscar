@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -57,10 +58,18 @@ func New(dsn string) (relstor.Provider, error) {
 				return nil, err
 			}
 		}
+		fallthrough
 	case 2:
+		for _, q := range migrationQueries003 {
+			_, err := tx.Exec(q)
+			if err != nil {
+				return nil, err
+			}
+		}
+	case 3:
 		// database schema is up to date. nothing to do.
 	}
-	db.setSchemaVersion(tx, 2)
+	db.setSchemaVersion(tx, 3)
 
 	err = tx.Commit()
 	if err != nil {
@@ -208,14 +217,10 @@ func (db sqliteDB) FCMTokensRaw(userID int64) ([]string, error) {
 	const query = `SELECT token FROM user_fcm_tokens WHERE user_id=?`
 	tokens := make([]string, 0)
 	err := db.dbx.Select(&tokens, query, userID)
-	switch err {
-	case nil:
-		fallthrough
-	case sql.ErrNoRows:
-		return tokens, nil
-	default:
+	if err != nil {
 		return nil, err
 	}
+	return tokens, nil
 }
 
 func (db sqliteDB) FCMTokenUser(userID int64, token string) (*relstor.FCMTokenRecord, error) {
@@ -303,17 +308,21 @@ func (db sqliteDB) InsertUser(user relstor.UserRecord, verificationToken *string
 								:wrapped_symmetric_key_nonce)`
 	tx, err := db.dbx.Beginx()
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to start transaction")
+		return 0, fmt.Errorf("unable to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	result, err := tx.NamedExec(insertSQL, user)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to insert user into table")
+		msg := err.Error()
+		if strings.Contains(msg, "UNIQUE constraint") && strings.Contains(msg, "username") {
+			return 0, relstor.ErrDuplicateUsername
+		}
+		return 0, fmt.Errorf("failed to insert user into table: %w", err)
 	}
 	userID, err := result.LastInsertId()
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to obtain id of new user record")
+		return 0, fmt.Errorf("unable to obtain id of new user record: %w", err)
 	}
 
 	// if there is a verification token, create a record for that as well
@@ -321,13 +330,13 @@ func (db sqliteDB) InsertUser(user relstor.UserRecord, verificationToken *string
 		insertSQL = `INSERT INTO email_verification_tokens (user_id, token, email, send_date) VALUES (?, ?, ?, ?)`
 		_, err = tx.Exec(insertSQL, userID, *verificationToken, user.Email, time.Now().Unix())
 		if err != nil {
-			return 0, errors.Wrap(err, "unable to insert verification token")
+			return 0, fmt.Errorf("unable to insert verification token: %w", err)
 		}
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to commit InsertUser")
+		return 0, fmt.Errorf("failed to commit tx: %w", err)
 	}
 
 	return userID, nil
