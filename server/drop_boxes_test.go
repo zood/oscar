@@ -2,34 +2,36 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDropPackageHandler(t *testing.T) {
 	p := createTestProviders(t)
-	r := newOscarRouter(p)
-
-	user, kp := createTestUser(t, p)
-	token := loginTestUser(t, p, user, kp)
-
 	dropBoxID := make([]byte, dropBoxIDSize)
 	_, err := rand.Read(dropBoxID)
 	require.NoError(t, err)
 
-	endpoint := fmt.Sprintf("/1/drop-boxes/%s", hex.EncodeToString(dropBoxID))
 	pkg := []byte("some data to put in the box")
-	req := httptest.NewRequest(http.MethodPut, endpoint, bytes.NewReader(pkg))
-	req.Header.Add("X-Oscar-Access-Token", token)
+	r := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(pkg))
+	r = mux.SetURLVars(r, map[string]string{"box_id": hex.EncodeToString(dropBoxID)})
+	ctx := context.WithValue(r.Context(), contextServerProvidersKey, p)
+	r = r.WithContext(ctx)
 
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	dropPackageHandler(w, r)
 
-	require.Equal(t, http.StatusOK, w.Code, "Got %d: %s", w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code, "Got: %s", w.Body.String())
+
+	// make sure the package is there
+	actualPkg, err := p.kvs.PickUpPackage(dropBoxID)
+	require.NoError(t, err)
+	require.Equal(t, pkg, actualPkg)
 }

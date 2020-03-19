@@ -181,7 +181,7 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Sec-Websocket-Protocol")
 	providers := providersCtx(r.Context())
 	db := providers.db
-	userID, err := verifyAccessToken(db, providers.symKey, providers.keyPair, token)
+	userID, err := verifyAccessToken(db, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

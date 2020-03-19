@@ -12,7 +12,7 @@ import (
 	"zood.dev/oscar/base62"
 	"zood.dev/oscar/encodable"
 	"zood.dev/oscar/kvstor"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
 
@@ -90,7 +90,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}{ID: pubID})
 }
 
-func createUser(db relstor.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer, user User) ([]byte, *serverError) {
+func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer, user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
@@ -175,7 +175,7 @@ func createUser(db relstor.Provider, kvs kvstor.Provider, emailer smtp.SendEmail
 		return nil, &serverError{code: errorUsernameNotAvailable, message: "That username is already in use"}
 	}
 
-	userRec := relstor.UserRecord{
+	userRec := model.UserRecord{
 		Username:                    user.Username,
 		PasswordSalt:                user.PasswordSalt,
 		PasswordHashAlgorithm:       user.PasswordHashAlgorithm,

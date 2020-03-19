@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/model"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
 )
@@ -38,6 +39,7 @@ func loginTestUser(t *testing.T, providers *serverProviders, user User, userKeyP
 	require.NoError(t, err)
 	accessTokenBytes := append(tokeNonce, tokenCT...)
 	accessToken = base64.StdEncoding.EncodeToString(accessTokenBytes)
+	providers.db.InsertAccessToken(accessToken, user.ID, time.Now().Add(24*time.Hour).Unix())
 	return
 }
 
@@ -293,17 +295,38 @@ func TestFinishAuthChallengeHandler(t *testing.T) {
 }
 
 func TestVerifyAccessToken(t *testing.T) {
-	providers := createTestProviders(t)
-	user, keyPair := createTestUser(t, providers)
-	accessToken := loginTestUser(t, providers, user, keyPair)
+	db := sqlite.NewMockDB(t)
 
-	userID, err := verifyAccessToken(providers.db, providers.symKey, providers.keyPair, accessToken)
-	if err != nil {
-		t.Fatal(err)
+	// Test verification with no token in the database
+	actual, err := verifyAccessToken(db, "not-a-token")
+	require.NoError(t, err)
+	require.Zero(t, actual)
+
+	// Test that present tokens are properly verified
+	atr := model.AccessTokenRecord{
+		Token:     "dadadaalalalal",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		UserID:    15,
 	}
-	if userID != user.ID {
-		t.Fatalf("user id mismatch: %d != %d", userID, user.ID)
+	err = db.InsertAccessToken(atr.Token, atr.UserID, atr.ExpiresAt)
+	require.NoError(t, err)
+
+	actual, err = verifyAccessToken(db, atr.Token)
+	require.NoError(t, err)
+	require.Equal(t, atr.UserID, actual)
+
+	// Test verification with an expired token
+	atr = model.AccessTokenRecord{
+		Token:     "13907ufjh",
+		ExpiresAt: time.Now().Add(-time.Hour).Unix(),
+		UserID:    20,
 	}
+	err = db.InsertAccessToken(atr.Token, atr.UserID, atr.ExpiresAt)
+	require.NoError(t, err)
+
+	actual, err = verifyAccessToken(db, atr.Token)
+	require.NoError(t, err)
+	require.Zero(t, actual)
 }
 
 func TestSessionHandler(t *testing.T) {
@@ -325,13 +348,8 @@ func TestSessionHandler(t *testing.T) {
 
 	wrappedFn.ServeHTTP(w, r)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected 200. Got %d: %s", w.Code, w.Body.Bytes())
-	}
-
-	if !bytes.Equal(w.Body.Bytes(), data) {
-		t.Fatalf("body mismatch: '%s' != '%s'", w.Body.Bytes(), data)
-	}
+	require.Equal(t, http.StatusOK, w.Code, "Got: %s", w.Body.Bytes())
+	require.Equal(t, data, w.Body.Bytes())
 
 	// make sure we get an error for an invalid token
 	// reuse the request
@@ -339,7 +357,5 @@ func TestSessionHandler(t *testing.T) {
 	w = httptest.NewRecorder()
 	wrappedFn.ServeHTTP(w, r)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("Expecting unauthorized. Got %d: %s", w.Code, w.Body.Bytes())
-	}
+	require.Equal(t, http.StatusUnauthorized, w.Code, "Got: %s", w.Body.Bytes())
 }

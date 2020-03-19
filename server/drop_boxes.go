@@ -186,12 +186,12 @@ func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, string, boo
 	boxIDStr := vars["box_id"]
 	boxID, err := hex.DecodeString(boxIDStr)
 	if err != nil {
-		sendBadReq(w, fmt.Sprintf("invalid drop box id"))
+		sendBadReq(w, "invalid drop box id")
 		return nil, "", false
 	}
 
 	if len(boxID) != dropBoxIDSize {
-		sendBadReq(w, fmt.Sprintf("invalid drop box id"))
+		sendBadReq(w, "invalid drop box id")
 		return nil, "", false
 	}
 

@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 )
 
 var apnsClient *apns2.Client
@@ -108,7 +108,7 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func sendAPNSMessage(db relstor.Provider, userID int64, payload interface{}) {
+func sendAPNSMessage(db model.Provider, userID int64, payload interface{}) {
 	tokens, err := db.APNSTokensRaw(userID)
 	if err != nil {
 		logErr(err)

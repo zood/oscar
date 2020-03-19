@@ -10,7 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"zood.dev/oscar/encodable"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 )
 
 // Message ...
@@ -188,7 +188,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(db relstor.Provider, msg Message, userID int64, urgent bool) {
+func pushMessageToUser(db model.Provider, msg Message, userID int64, urgent bool) {
 	msgMap := map[string]interface{}{
 		"id":          strconv.FormatInt(msg.ID, 10),
 		"cipher_text": msg.CipherText,

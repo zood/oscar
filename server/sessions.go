@@ -6,16 +6,15 @@ import (
 	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
 	"zood.dev/oscar/base62"
 	"zood.dev/oscar/encodable"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 	"zood.dev/oscar/sodium"
 )
 
@@ -203,6 +202,12 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	accessToken := append(tokenNonce, tokenCT...)
 	accessTokenB64 := base64.StdEncoding.EncodeToString(accessToken)
+	oneYearFromNow := time.Now().Add(365 * 24 * time.Hour)
+	err = db.InsertAccessToken(accessTokenB64, user.ID, oneYearFromNow.Unix())
+	if err != nil {
+		sendInternalErr(w, err)
+		return
+	}
 
 	kvs := providersCtx(r.Context()).kvs
 	pubID, err := kvs.PublicIDFromUserID(user.ID)
@@ -228,7 +233,7 @@ func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Oscar-Access-Token")
 		providers := providersCtx(r.Context())
-		userID, err := verifyAccessToken(providers.db, providers.symKey, providers.keyPair, token)
+		userID, err := verifyAccessToken(providers.db, token)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -248,68 +253,31 @@ func userIDFromContext(ctx context.Context) int64 {
 	return ctx.Value(contextUserIDKey).(int64)
 }
 
-func verifyAccessToken(db relstor.Provider, serverSymKey []byte, serverKeyPair sodium.KeyPair, token string) (int64, error) {
+func verifyAccessToken(db model.Provider, token string) (int64, error) {
 	if token == "" {
 		return 0, nil
 	}
 
-	// base64 => decrypt token => get user's public key => decrypt inner token => make sure creation dates match
-	encryptedTokenBytes, err := base64.StdEncoding.DecodeString(token)
-	if err != nil {
-		return 0, nil
-	}
-	if len(encryptedTokenBytes) < sodium.SymmetricNonceSize+10 {
-		return 0, nil
-	}
-	tokenNonce := encryptedTokenBytes[:sodium.SymmetricNonceSize]
-	tokenCipherText := encryptedTokenBytes[sodium.SymmetricNonceSize:]
-	decryptedToken, ok := sodium.SymmetricKeyDecrypt(tokenCipherText, tokenNonce, serverSymKey)
-	if !ok {
-		return 0, nil
-	}
-
-	st := sessionToken{}
-	err = json.Unmarshal(decryptedToken, &st)
-	if err != nil {
-		return 0, nil
-	}
-
-	// sanity check on decoded JSON
-	if st.CreationDate == 0 || len(st.EncryptedCreationDate) < sodium.SymmetricNonceSize+10 || st.Name == "" {
-		return 0, nil
-	}
-
-	// get the user's public key
-	userID, pubKey, err := db.LimitedUserInfo(st.Name)
+	atr, err := db.AccessToken(token)
 	if err != nil {
 		return 0, err
 	}
-	if pubKey == nil {
+	if atr == nil {
 		return 0, nil
 	}
 
-	cdNonce := st.EncryptedCreationDate[:sodium.SymmetricNonceSize]
-	cdCipherText := st.EncryptedCreationDate[sodium.SymmetricNonceSize:]
-	dcdCreationDateBytes, ok := sodium.PublicKeyDecrypt(cdCipherText, cdNonce, pubKey, serverKeyPair.Secret)
-	if !ok {
-		return 0, nil
-	}
-	dcdCreationDate, err := bytesToInt64Err(dcdCreationDateBytes)
-	if err != nil {
-		return 0, nil
-	}
-	if dcdCreationDate != st.CreationDate {
-		log.Printf("server creation date differed from user encrypted creation date")
+	// check if the access token is expired
+	if time.Now().Unix() > atr.ExpiresAt {
 		return 0, nil
 	}
 
-	return userID, nil
+	return atr.UserID, nil
 }
 
-func verifySessionTicket(db relstor.Provider, ticket string) (int64, error) {
+func verifySessionTicket(db model.Provider, ticket string) (int64, error) {
 	userID, timestamp, err := db.Ticket(ticket)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to query for ticket")
+		return 0, fmt.Errorf("failed to query for ticket: %w", err)
 	}
 
 	if userID == 0 {

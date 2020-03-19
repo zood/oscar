@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 )
 
 var gFCMServerKey string
@@ -48,7 +48,7 @@ type fcmMulticastMessage struct {
 	Data     interface{} `json:"data"`
 }
 
-func sendFirebaseMessage(db relstor.Provider, userID int64, payload interface{}, urgent bool) {
+func sendFirebaseMessage(db model.Provider, userID int64, payload interface{}, urgent bool) {
 	tokens, err := db.FCMTokensRaw(userID)
 	if err != nil {
 		logErr(err)

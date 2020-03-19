@@ -11,7 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // because, duh
 	"github.com/pkg/errors"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 )
 
 // InMemoryDSN creates a temporary in-memory only database when used as a DSN
@@ -21,13 +21,13 @@ const (
 	tableTickets = "tickets"
 )
 
-// sqliteDB fulfills the relstor.Provider interface
+// sqliteDB fulfills the model.Provider interface
 type sqliteDB struct {
 	dbx *sqlx.DB
 }
 
-// New returns a relstor.Provider backed by sqlite
-func New(dsn string) (relstor.Provider, error) {
+// New returns a model.Provider backed by sqlite
+func New(dsn string) (model.Provider, error) {
 	dbx, err := sqlx.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
@@ -79,9 +79,23 @@ func New(dsn string) (relstor.Provider, error) {
 	return db, nil
 }
 
-func (db sqliteDB) APNSToken(token string) (*relstor.APNSTokenRecord, error) {
+func (db sqliteDB) AccessToken(token string) (*model.AccessTokenRecord, error) {
+	const query = `SELECT user_id, expires_at FROM sessions WHERE token=?`
+	atr := model.AccessTokenRecord{Token: token}
+	err := db.dbx.QueryRowx(query, token).StructScan(&atr)
+	switch err {
+	case nil:
+		return &atr, nil
+	case sql.ErrNoRows:
+		return nil, nil
+	default:
+		return nil, err
+	}
+}
+
+func (db sqliteDB) APNSToken(token string) (*model.APNSTokenRecord, error) {
 	const query = `SELECT id, user_id FROM user_apns_tokens WHERE token=?`
-	ftr := relstor.APNSTokenRecord{Token: token}
+	ftr := model.APNSTokenRecord{Token: token}
 	err := db.dbx.QueryRowx(query, token).StructScan(&ftr)
 	switch err {
 	case nil:
@@ -103,13 +117,13 @@ func (db sqliteDB) APNSTokensRaw(userID int64) ([]string, error) {
 	return tokens, nil
 }
 
-func (db sqliteDB) APNSTokenUser(userID int64, token string) (*relstor.APNSTokenRecord, error) {
+func (db sqliteDB) APNSTokenUser(userID int64, token string) (*model.APNSTokenRecord, error) {
 	const query = "SELECT id FROM user_apns_tokens WHERE user_id=? AND token=?"
 	var id int64
 	err := db.dbx.QueryRow(query, userID, token).Scan(&id)
 	switch err {
 	case nil:
-		return &relstor.APNSTokenRecord{ID: id, UserID: userID, Token: token}, nil
+		return &model.APNSTokenRecord{ID: id, UserID: userID, Token: token}, nil
 	case sql.ErrNoRows:
 		return nil, nil
 	default:
@@ -182,9 +196,9 @@ func (db sqliteDB) DisavowEmail(token string) error {
 	return nil
 }
 
-func (db sqliteDB) EmailVerificationTokenRecord(token string) (*relstor.EmailVerificationTokenRecord, error) {
+func (db sqliteDB) EmailVerificationTokenRecord(token string) (*model.EmailVerificationTokenRecord, error) {
 	const query = `SELECT user_id, email, send_date FROM email_verification_tokens WHERE token=?`
-	evtr := relstor.EmailVerificationTokenRecord{}
+	evtr := model.EmailVerificationTokenRecord{}
 	err := db.dbx.QueryRow(query, token).Scan(&evtr.UserID, &evtr.Email, &evtr.SendDate)
 	switch err {
 	case nil:
@@ -199,9 +213,9 @@ func (db sqliteDB) EmailVerificationTokenRecord(token string) (*relstor.EmailVer
 	return &evtr, nil
 }
 
-func (db sqliteDB) FCMToken(token string) (*relstor.FCMTokenRecord, error) {
+func (db sqliteDB) FCMToken(token string) (*model.FCMTokenRecord, error) {
 	const query = `SELECT id, user_id FROM user_fcm_tokens WHERE token=?`
-	ftr := relstor.FCMTokenRecord{Token: token}
+	ftr := model.FCMTokenRecord{Token: token}
 	err := db.dbx.QueryRowx(query, token).StructScan(&ftr)
 	switch err {
 	case nil:
@@ -223,18 +237,27 @@ func (db sqliteDB) FCMTokensRaw(userID int64) ([]string, error) {
 	return tokens, nil
 }
 
-func (db sqliteDB) FCMTokenUser(userID int64, token string) (*relstor.FCMTokenRecord, error) {
+func (db sqliteDB) FCMTokenUser(userID int64, token string) (*model.FCMTokenRecord, error) {
 	const query = "SELECT id FROM user_fcm_tokens WHERE user_id=? AND token=?"
 	var id int64
 	err := db.dbx.QueryRow(query, userID, token).Scan(&id)
 	switch err {
 	case nil:
-		return &relstor.FCMTokenRecord{ID: id, UserID: userID, Token: token}, nil
+		return &model.FCMTokenRecord{ID: id, UserID: userID, Token: token}, nil
 	case sql.ErrNoRows:
 		return nil, nil
 	default:
 		return nil, err
 	}
+}
+
+func (db sqliteDB) InsertAccessToken(token string, userID int64, expiresAt int64) error {
+	_, err := squirrel.Insert("sessions").SetMap(map[string]interface{}{
+		"token":      token,
+		"user_id":    userID,
+		"expires_at": expiresAt,
+	}).RunWith(db.dbx.DB).Exec()
+	return err
 }
 
 func (db sqliteDB) InsertAPNSToken(userID int64, token string) error {
@@ -283,7 +306,7 @@ func (db sqliteDB) InsertTicket(ticket string, userID int64) error {
 	return err
 }
 
-func (db sqliteDB) InsertUser(user relstor.UserRecord, verificationToken *string) (int64, error) {
+func (db sqliteDB) InsertUser(user model.UserRecord, verificationToken *string) (int64, error) {
 	// we don't insert the email, because it only gets inserted upon verification
 	insertSQL := `
 	INSERT INTO users (	username,
@@ -316,7 +339,7 @@ func (db sqliteDB) InsertUser(user relstor.UserRecord, verificationToken *string
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "UNIQUE constraint") && strings.Contains(msg, "username") {
-			return 0, relstor.ErrDuplicateUsername
+			return 0, model.ErrDuplicateUsername
 		}
 		return 0, fmt.Errorf("failed to insert user into table: %w", err)
 	}
@@ -366,7 +389,7 @@ func (db sqliteDB) LimitedUserInfoID(userID int64) (username string, pubKey []by
 	}
 }
 
-func (db sqliteDB) MessageRecords(recipientID int64) ([]relstor.MessageRecord, error) {
+func (db sqliteDB) MessageRecords(recipientID int64) ([]model.MessageRecord, error) {
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
 	rows, err := db.dbx.Queryx(selectSQL, recipientID)
@@ -375,9 +398,9 @@ func (db sqliteDB) MessageRecords(recipientID int64) ([]relstor.MessageRecord, e
 	}
 	defer rows.Close()
 
-	msgs := make([]relstor.MessageRecord, 0)
+	msgs := make([]model.MessageRecord, 0)
 	for rows.Next() {
-		msg := relstor.MessageRecord{}
+		msg := model.MessageRecord{}
 		err = rows.StructScan(&msg)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to scan a row")
@@ -404,10 +427,10 @@ func (db sqliteDB) setSchemaVersion(tx *sqlx.Tx, version int) error {
 	return err
 }
 
-func (db sqliteDB) MessageToRecipient(recipientID, msgID int64) (*relstor.MessageRecord, error) {
+func (db sqliteDB) MessageToRecipient(recipientID, msgID int64) (*model.MessageRecord, error) {
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=? AND id=?`
-	msg := relstor.MessageRecord{}
+	msg := model.MessageRecord{}
 	err := db.dbx.Get(&msg, selectSQL, recipientID, msgID)
 	switch err {
 	case nil:
@@ -448,10 +471,10 @@ func (db sqliteDB) ReplaceFCMToken(old, new string) (rowsAffected int64, err err
 	return rowsAffected, nil
 }
 
-func (db sqliteDB) SessionChallenge(userID int64) (*relstor.SessionChallengeRecord, error) {
+func (db sqliteDB) SessionChallenge(userID int64) (*model.SessionChallengeRecord, error) {
 	const challengeSQL = `
 	SELECT id, creation_date, challenge FROM session_challenges WHERE user_id=?`
-	var challenge relstor.SessionChallengeRecord
+	var challenge model.SessionChallengeRecord
 	err := db.dbx.QueryRowx(challengeSQL, userID).StructScan(&challenge)
 	switch err {
 	case nil:
@@ -493,7 +516,7 @@ func (db sqliteDB) UpdateUserIDOfFCMToken(newUserID int64, token string) error {
 	return err
 }
 
-func (db sqliteDB) User(username string) (*relstor.UserRecord, error) {
+func (db sqliteDB) User(username string) (*model.UserRecord, error) {
 	query := `
 	SELECT 	id,
 			username,
@@ -508,7 +531,7 @@ func (db sqliteDB) User(username string) (*relstor.UserRecord, error) {
 			password_hash_memory_limit,
 			email
 	FROM users WHERE username=?`
-	user := relstor.UserRecord{}
+	user := model.UserRecord{}
 	err := db.dbx.Get(&user, query, username)
 	switch err {
 	case nil:

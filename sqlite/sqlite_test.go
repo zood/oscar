@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 )
 
 func newDB(t *testing.T) sqliteDB {
@@ -17,11 +17,38 @@ func newDB(t *testing.T) sqliteDB {
 	return db.(sqliteDB)
 }
 
+func TestAccessTokens(t *testing.T) {
+	db := newDB(t)
+
+	actual, err := db.AccessToken("bad-token-value")
+	require.NoError(t, err)
+	require.Nil(t, actual)
+
+	var goldenData []model.AccessTokenRecord
+	for i := 0; i < 5; i++ {
+		atr := model.AccessTokenRecord{
+			Token:     fmt.Sprintf("token-data-%d", i),
+			ExpiresAt: time.Now().Add(time.Duration(i) * time.Hour).Unix(),
+			UserID:    int64(i % 4),
+		}
+		goldenData = append(goldenData, atr)
+		err = db.InsertAccessToken(atr.Token, atr.UserID, atr.ExpiresAt)
+		require.NoError(t, err)
+	}
+
+	for _, expected := range goldenData {
+		atr, err := db.AccessToken(expected.Token)
+		require.NoError(t, err)
+		require.NotNil(t, atr)
+		require.Equal(t, expected, *atr)
+	}
+}
+
 func TestEmailVerification(t *testing.T) {
 	db := newDB(t)
 
 	email := "foo@zood.xyz"
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		Email:                       &email,
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
@@ -81,7 +108,7 @@ func TestDisavowEmail(t *testing.T) {
 	db := newDB(t)
 
 	email := "foo@zood.xyz"
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		Email:                       &email,
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
@@ -124,7 +151,7 @@ func TestMessagesPart1(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, msgs)
 
-	expected := relstor.MessageRecord{
+	expected := model.MessageRecord{
 		RecipientID: 2,
 		SenderID:    3,
 		CipherText:  []byte("cipher-text"),
@@ -149,7 +176,7 @@ func TestMessagesPart2(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, actual)
 
-	expected := relstor.MessageRecord{
+	expected := model.MessageRecord{
 		RecipientID: 2,
 		SenderID:    3,
 		CipherText:  []byte("cipher-text"),
@@ -201,7 +228,7 @@ func TestMessagesPart2(t *testing.T) {
 }
 
 func TestInsertUser2(t *testing.T) {
-	u := relstor.UserRecord{
+	u := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -221,7 +248,7 @@ func TestInsertUser2(t *testing.T) {
 
 	// make sure a user with the same username can't be inserted
 	_, err = db.InsertUser(u, nil)
-	require.Equal(t, relstor.ErrDuplicateUsername, err)
+	require.Equal(t, model.ErrDuplicateUsername, err)
 
 	// make sure we retrieve the same user back
 	actual, err := db.User(u.Username)
@@ -242,7 +269,7 @@ func TestLimitedUserInfo(t *testing.T) {
 	require.Zero(t, id)
 	require.Nil(t, pubKey)
 
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -271,7 +298,7 @@ func TestLimitedUserInfoID(t *testing.T) {
 	require.Empty(t, username)
 	require.Nil(t, pubKey)
 
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -298,7 +325,7 @@ func TestUsername(t *testing.T) {
 	actual := db.Username(33491)
 	require.Empty(t, actual)
 
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -325,7 +352,7 @@ func TestUsernameAvailable(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, available)
 
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -351,7 +378,7 @@ func TestUserPublicKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, actual)
 
-	user := relstor.UserRecord{
+	user := model.UserRecord{
 		PasswordHashAlgorithm:       "argon2id13",
 		PasswordHashMemoryLimit:     32768,
 		PasswordHashOperationsLimit: 6,
@@ -375,7 +402,7 @@ func TestUserPublicKey(t *testing.T) {
 func TestSessionChallenge(t *testing.T) {
 	db := newDB(t)
 
-	expected := relstor.SessionChallengeRecord{
+	expected := model.SessionChallengeRecord{
 		Challenge:    []byte("challenge-all-the-things"),
 		CreationDate: time.Now().Unix(),
 		UserID:       32,
@@ -410,7 +437,7 @@ func TestSessionChallenge(t *testing.T) {
 func TestDeleteSessionChallengeID(t *testing.T) {
 	db := newDB(t)
 
-	expected := relstor.SessionChallengeRecord{
+	expected := model.SessionChallengeRecord{
 		Challenge:    []byte("challenge-all-the-things"),
 		CreationDate: time.Now().Unix(),
 		UserID:       32,

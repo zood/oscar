@@ -15,14 +15,14 @@ import (
 	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
 	"zood.dev/oscar/localdisk"
-	"zood.dev/oscar/relstor"
+	"zood.dev/oscar/model"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
 )
 
 type serverProviders struct {
-	db      relstor.Provider
+	db      model.Provider
 	emailer smtp.SendEmailer
 	fs      filestor.Provider
 	kvs     kvstor.Provider
@@ -40,8 +40,7 @@ func (sp *serverProviders) Middleware(next http.Handler) http.Handler {
 func createTestProviders(t *testing.T) *serverProviders {
 	t.Helper()
 
-	db, err := sqlite.New(sqlite.InMemoryDSN)
-	require.NoError(t, err)
+	db := sqlite.NewMockDB(t)
 
 	kvs := boltdb.Temp(t)
 	symKey := make([]byte, sodium.SymmetricKeySize)

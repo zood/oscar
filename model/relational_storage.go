@@ -1,8 +1,14 @@
-package relstor
+package model
 
 import "errors"
 
 var ErrDuplicateUsername = errors.New("a user with that username already exists")
+
+type AccessTokenRecord struct {
+	Token     string `db:"token"`
+	UserID    int64  `db:"user_id"`
+	ExpiresAt int64  `db:"expires_at"`
+}
 
 // APNSTokenRecord represents a row in the user_apns_tokens table
 type APNSTokenRecord struct {
@@ -64,6 +70,7 @@ type UserRecord struct {
 // The interface exists as an intermediary, so unit tests can be written against the oscar code
 // with a stubbed out relational database.
 type Provider interface {
+	AccessToken(token string) (*AccessTokenRecord, error)
 	APNSToken(token string) (*APNSTokenRecord, error)
 	APNSTokensRaw(userID int64) ([]string, error)
 	APNSTokenUser(userID int64, token string) (*APNSTokenRecord, error)
@@ -80,6 +87,7 @@ type Provider interface {
 	FCMToken(token string) (*FCMTokenRecord, error)
 	FCMTokensRaw(userID int64) ([]string, error)
 	FCMTokenUser(userID int64, token string) (*FCMTokenRecord, error)
+	InsertAccessToken(token string, userID int64, expiresAt int64) error
 	InsertAPNSToken(userID int64, token string) error
 	InsertFCMToken(userID int64, token string) error
 	InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error)
