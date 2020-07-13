@@ -240,6 +240,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := parseUserID(w, r)
 	if !ok {
+		sendNotFound(w, "user not found", errorUserNotFound)
 		return
 	}
 
