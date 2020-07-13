@@ -30,6 +30,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestProviderCreation(t *testing.T) {
+	t.Parallel()
+
 	_, err := New("", "")
 	require.Error(t, err)
 
@@ -42,6 +44,8 @@ func TestProviderCreation(t *testing.T) {
 }
 
 func TestReadNonExistentObject(t *testing.T) {
+	t.Parallel()
+
 	p := provider(t)
 	fp := filepath.Join(testDir, "should-not-exist")
 
@@ -53,6 +57,8 @@ func TestReadNonExistentObject(t *testing.T) {
 }
 
 func TestWriteNewFile(t *testing.T) {
+	t.Parallel()
+
 	p := provider(t)
 	fp := filepath.Join(testDir, "lyrics.txt")
 
@@ -75,6 +81,8 @@ func TestWriteNewFile(t *testing.T) {
 }
 
 func TestUpdateFile(t *testing.T) {
+	t.Parallel()
+
 	p := provider(t)
 	fp := filepath.Join(testDir, "list.txt")
 	data1 := []byte("*Eggs\n*Milk\n")
