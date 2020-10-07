@@ -125,10 +125,8 @@ func (ss socketServer) watchBox(boxID []byte) {
 			select {
 			case <-ss.closed:
 				return
-			case pkg := <-sub:
-				if pkg == nil {
-					// The channel was closed. Hopefully, due to an unsubscribe, and not a bug.
-					close(ss.pkgs)
+			case pkg, ok := <-sub:
+				if !ok {
 					return
 				}
 				buf := append([]byte{socketServerCmdPackage}, boxID...)
