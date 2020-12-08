@@ -130,7 +130,7 @@ func newOscarRouter(p *serverProviders) http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/server-info", serverInfoHandler).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/log-level", logLevelHandler).Methods(http.MethodGet, http.MethodOptions)
-	r.HandleFunc("/log-level", setLogLevelHandler).Methods(http.MethodPut, http.MethodOptions)
+	// r.HandleFunc("/log-level", setLogLevelHandler).Methods(http.MethodPut, http.MethodOptions)
 	v1 := r.PathPrefix("/1").Subrouter()
 
 	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
