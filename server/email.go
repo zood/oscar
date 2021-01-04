@@ -52,6 +52,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 
 	if body.Token == "" {
 		sendBadReqCode(w, "Missing verification token", errorBadRequest)
+		return
 	}
 
 	db := providersCtx(r.Context()).db
