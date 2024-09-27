@@ -1,174 +1,49 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 
+	"firebase.google.com/go/v4/messaging"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/model"
 )
 
-var gFCMServerKey string
-
-type fcmResult struct {
-	MessageID      *string `json:"message_id,omitempty"`
-	Error          *string `json:"error,omitempty"`
-	RegistrationID *string `json:"registration_id,omitempty"`
-}
-
-func (r fcmResult) String() string {
-	buf, err := json.Marshal(r)
-	if err != nil {
-		return "err marshalling gcmresult: " + err.Error()
-	}
-	return string(buf)
-}
-
-type fcmResponse struct {
-	MulticastID  int64       `json:"multicast_id"`
-	Success      int         `json:"success"`
-	Failure      int         `json:"failure"`
-	CanonicalIDs int         `json:"canonical_ids"`
-	Results      []fcmResult `json:"results"`
-}
-
-type fcmUnicastMessage struct {
-	To       string      `json:"to"`
-	Priority string      `json:"priority,omitempty"`
-	Data     interface{} `json:"data"`
-}
-
-type fcmMulticastMessage struct {
-	Tokens   []string    `json:"registration_ids"`
-	Priority string      `json:"priority,omitempty"`
-	Data     interface{} `json:"data"`
-}
-
-func sendFirebaseMessage(db model.Provider, userID int64, payload interface{}, urgent bool) {
+func sendFirebaseMessage(db model.Provider, fbClient *messaging.Client, userID int64, payload map[string]string, urgent bool) {
 	tokens, err := db.FCMTokensRaw(userID)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("db.FCMTokensRaw")
 		return
 	}
 
 	if len(tokens) == 0 {
 		return
 	}
-	priority := ""
+
+	cfg := &messaging.AndroidConfig{}
 	if urgent {
-		priority = "high"
+		cfg.Priority = "high"
 	} else {
-		priority = "normal"
-	}
-	var msg interface{}
-	if len(tokens) == 1 {
-		msg = fcmUnicastMessage{
-			To:       tokens[0],
-			Priority: priority,
-			Data:     payload,
-		}
-	} else {
-		msg = fcmMulticastMessage{
-			Tokens:   tokens,
-			Priority: priority,
-			Data:     payload,
-		}
+		cfg.Priority = "normal"
 	}
 
-	msgBytes, _ := json.Marshal(msg)
-	msgReader := bytes.NewReader(msgBytes)
-	req, err := http.NewRequest(
-		"POST",
-		"https://fcm.googleapis.com/fcm/send",
-		msgReader)
-	if err != nil {
-		logErr(err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "key="+gFCMServerKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		logErr(err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		buf, _ := ioutil.ReadAll(resp.Body)
-		err = fmt.Errorf("status code %d\nheaders:\n%v\n\nresponse:\n%s", resp.StatusCode, resp.Header, string(buf))
-		logErr(err)
-		return
-	}
-
-	fcmBody := &fcmResponse{}
-	err = json.NewDecoder(resp.Body).Decode(fcmBody)
-	if err != nil {
-		logErr(err)
-		return
-	}
-
-	// if everything went smoothly, we're done
-	if fcmBody.Failure == 0 && fcmBody.CanonicalIDs == 0 {
-		if shouldLogDebug() {
-			log.Printf("msg id %s", *fcmBody.Results[0].MessageID)
-		}
-		return
-	}
-
-	log.Printf("fcm send was less than normal")
-
-	// let's find out what went wrong
-	for i, result := range fcmBody.Results {
-		if result.MessageID != nil && result.RegistrationID != nil {
-			// We've been provided a canonical registration id. Check if we
-			// already have that ID. If so, just drop the old token. If not,
-			// update the old token to the new one.
-			log.Printf("| MessageID: %v, RegID: %v", result.MessageID, result.RegistrationID)
-			// check if we already have the canonical token for this user
-			tokRec, err := db.FCMTokenUser(userID, *result.RegistrationID)
-			if err == nil && tokRec != nil {
-				// we do, so drop the row with the old token
-				err := db.DeleteFCMToken(tokens[i])
-				if err != nil {
-					logErr(err)
-				}
-			} else if err == nil {
-				// nope, we don't. So replace the old token.
-				rowsAffected, err := db.ReplaceFCMToken(tokens[i], *result.RegistrationID)
-				if err != nil {
-					logErr(err)
-				} else {
-					if rowsAffected != 1 {
-						logErr(fmt.Errorf("received a registration id change, but no %d rows affected in db change\nmessage_id: %s\nregistration_id: %s\nuser id: %d\ntoken: %s",
-							rowsAffected,
-							*result.MessageID,
-							*result.RegistrationID,
-							userID,
-							tokens[i]))
-					}
-				}
-			}
-			continue
-		}
-
-		if result.Error != nil {
-			switch *result.Error {
-			case "Unavailable":
-				// TODO: retry request
-			case "InvalidRegistration":
-				fallthrough
-			case "NotRegistered":
+	for _, tk := range tokens {
+		_, err = fbClient.Send(context.Background(), &messaging.Message{
+			Android: cfg,
+			Data:    payload,
+			Token:   tk,
+		})
+		if err != nil {
+			if messaging.IsUnregistered(err) {
 				// remove the token
-				db.DeleteFCMToken(tokens[i])
-			default:
-				logErr(fmt.Errorf("error sending via fcm: %s\nuser id: %d", *result.Error, userID))
+				if deleteErr := db.DeleteFCMToken(tk); deleteErr != nil {
+					log.Err(deleteErr).Msg("deleting an FCM token")
+				}
+				continue
 			}
+			log.Err(err).Msg("sending an FCM message")
 		}
 	}
 }

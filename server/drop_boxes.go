@@ -4,13 +4,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/internal/pubsub"
 	"zood.dev/oscar/kvstor"
 )
@@ -64,11 +63,9 @@ func (pl *packageListener) read() {
 			break
 		}
 		if msgType != websocket.BinaryMessage {
-			log.Printf("received a non-binary message")
 			break
 		}
 		if len(buf) == 0 {
-			log.Printf("received an invalid length message from client (%d). ignoring", len(buf))
 			continue
 		}
 		switch buf[0] {
@@ -78,7 +75,7 @@ func (pl *packageListener) read() {
 		case clientCmdIgnore:
 			pl.ignore(buf[1:])
 		default:
-			log.Printf("unknown socket command: %d", buf[0])
+			log.Info().Str("command", string(buf[0])).Msg("unknown socket command")
 		}
 	}
 
@@ -111,14 +108,13 @@ func (pl *packageListener) start() {
 
 func (pl *packageListener) watch(boxID []byte) {
 	if len(boxID) != dropBoxIDSize {
-		log.Printf("invalid drop box id length (%d)", len(boxID))
 		return
 	}
 	hexID := hex.EncodeToString(boxID)
 
 	// if there's already a sub for this id, skip
 	if _, ok := pl.subs[hexID]; ok {
-		log.Printf("Duplicate sub request. Skipping.")
+		log.Debug().Msg("skipping duplicate sub request")
 		return
 	}
 
@@ -133,7 +129,7 @@ func (pl *packageListener) watch(boxID []byte) {
 	// if there's already a package in the dropbox, send it
 	tmp, err := pl.kvs.PickUpPackage(boxID)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("kvs.PickUpPackage")
 	}
 	if len(tmp) > 0 {
 		sub <- tmp
@@ -237,7 +233,7 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data, err := ioutil.ReadAll(p)
+		data, err := io.ReadAll(p)
 		if err != nil {
 			sendBadReq(w, fmt.Sprintf("error reading part data: %s", err.Error()))
 			return
@@ -256,14 +252,14 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 
 		pkgs[hexBoxID] = data
 
-		if shouldLogInfo() {
+		if shouldLogDebug() {
 			boxes += hexBoxID + ", "
 		}
 	}
-	if shouldLogInfo() {
+	if shouldLogDebug() {
 		userID := userIDFromContext(r.Context())
 		db := providers.db
-		log.Printf("drop_multiple_packages: %s => %s", db.Username(userID), boxes)
+		log.Debug().Str("username", db.Username(userID)).Str("boxes", boxes).Msg("drop_multiple_packages")
 	}
 	kvs := providers.kvs
 	for hexBoxID, pkg := range pkgs {
@@ -292,16 +288,11 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	providers := providersCtx(r.Context())
-	if shouldLogInfo() {
-		userID := userIDFromContext(r.Context())
-		db := providers.db
-		log.Printf("%s dropping pkg to %s", db.Username(userID), hexBoxID)
-	}
 
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: about to read request body")
 	}
-	pkg, err := ioutil.ReadAll(r.Body)
+	pkg, err := io.ReadAll(r.Body)
 	if shouldLogDebug() {
 		log.Printf("\tdropPkg: read request error? %v", err)
 	}
@@ -337,9 +328,7 @@ func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
-	if shouldLogInfo() {
-		log.Printf("create_package_watcher")
-	}
+	log.Debug().Msg("create_package_watcher")
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,

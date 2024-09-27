@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"path/filepath"
-	"runtime"
 )
 
 // ErrCode ...
@@ -54,14 +51,4 @@ func (err serverError) String() string {
 
 func newInternalErr() *serverError {
 	return &serverError{code: errorInternal, message: "Internal server error"}
-}
-
-func logErr(err error) {
-	_, file, line, ok := runtime.Caller(1)
-	if !ok {
-		file = "???"
-		line = 0
-	}
-	file = filepath.Base(file)
-	log.Printf("%s:%d %v", file, line, err)
 }

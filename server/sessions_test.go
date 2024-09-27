@@ -130,7 +130,7 @@ func TestCreateAuthChallengeHandler(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/1/sessions/"+user.Username+"/challenge", nil)
 	w := httptest.NewRecorder()
 
-	router := newOscarRouter(providers)
+	router := newOscarRouter(providers, httpAPI{})
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
@@ -238,7 +238,7 @@ func TestFinishAuthChallengeHandler(t *testing.T) {
 		bytes.NewReader(data))
 	w := httptest.NewRecorder()
 
-	router := newOscarRouter(providers)
+	router := newOscarRouter(providers, httpAPI{})
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {

@@ -3,11 +3,21 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"runtime"
+
+	"firebase.google.com/go/v4/messaging"
+	"github.com/rs/zerolog/log"
+	"zood.dev/oscar/kvstor"
+	"zood.dev/oscar/model"
 )
+
+type httpAPI struct {
+	db  model.Provider
+	fcm *messaging.Client
+	kvs kvstor.Provider
+}
 
 func logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +82,7 @@ func sendInternalErr(w http.ResponseWriter, err error) {
 			line = 0
 		}
 		file = filepath.Base(file)
-		log.Printf("%s:%d %v", file, line, err)
+		log.Info().Str("file", file).Int("line", line).Err(err).Msg("internal server error")
 	}
 }
 

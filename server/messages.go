@@ -2,18 +2,17 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 
+	"firebase.google.com/go/v4/messaging"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/encodable"
 	"zood.dev/oscar/model"
 )
 
-// Message ...
 type Message struct {
 	ID             int64           `json:"id"`
 	RecipientID    int64           `json:"-"`
@@ -24,8 +23,7 @@ type Message struct {
 	SentDate       int64           `json:"sent_date"`
 }
 
-// sendMessageToUserHandler handles POST /users/{public_id}/messages
-func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	sessionUserID := userIDFromContext(r.Context())
 
 	// make sure this user exists
@@ -47,10 +45,9 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	providers := providersCtx(r.Context())
-	db := providers.db
-	if shouldLogInfo() {
+	if shouldLogDebug() {
 		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
-			db.Username(sessionUserID), db.Username(userID),
+			api.db.Username(sessionUserID), api.db.Username(userID),
 			body.Urgent, body.Transient)
 	}
 
@@ -65,7 +62,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !body.Transient {
-		msg.ID, err = db.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
+		msg.ID, err = api.db.InsertMessage(userID, sessionUserID, body.CipherText, body.Nonce, time.Now().Unix())
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -75,7 +72,7 @@ func sendMessageToUserHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 
 	go func() {
-		pushMessageToUser(db, msg, userID, body.Urgent)
+		pushMessageToUser(api.db, api.fcm, msg, userID, body.Urgent)
 	}()
 }
 
@@ -92,8 +89,8 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	providers := providersCtx(r.Context())
 	db := providers.db
-	if shouldLogInfo() {
-		log.Printf("get_message: %s %d", db.Username(userID), msgID)
+	if shouldLogDebug() {
+		log.Debug().Str("username", db.Username(userID)).Int64("messageId", msgID).Msg("get_message")
 	}
 
 	rec, err := db.MessageToRecipient(userID, msgID)
@@ -130,7 +127,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	providers := providersCtx(r.Context())
 	db := providers.db
-	if shouldLogInfo() {
+	if shouldLogDebug() {
 		log.Printf("get_messages: %s", db.Username(userID))
 	}
 
@@ -174,7 +171,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := providersCtx(r.Context()).db
-	if shouldLogInfo() {
+	if shouldLogDebug() {
 		log.Printf("delete_message: %s %d", db.Username(userID), msgID)
 	}
 
@@ -188,19 +185,19 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(db model.Provider, msg Message, userID int64, urgent bool) {
-	msgMap := map[string]interface{}{
+func pushMessageToUser(db model.Provider, fbClient *messaging.Client, msg Message, userID int64, urgent bool) {
+	msgMap := map[string]string{
 		"id":          strconv.FormatInt(msg.ID, 10),
-		"cipher_text": msg.CipherText,
-		"nonce":       msg.Nonce,
-		"sender_id":   msg.PublicSenderID,
+		"cipher_text": msg.CipherText.Base64(),
+		"nonce":       msg.Nonce.Base64(),
+		"sender_id":   msg.PublicSenderID.Base64(),
 		"sent_date":   strconv.FormatInt(msg.SentDate, 10),
 		"type":        "message_received",
 	}
 
 	buf, err := json.Marshal(msgMap)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("marshaling message map")
 		return
 	}
 
@@ -213,21 +210,21 @@ func pushMessageToUser(db model.Provider, msg Message, userID int64, urgent bool
 	}
 
 	if len(buf) <= 3584 {
-		sendFirebaseMessage(db, userID, msgMap, urgent)
+		sendFirebaseMessage(db, fbClient, userID, msgMap, urgent)
 		sendAPNSMessage(db, userID, msgMap)
 		return
 	}
 
 	// It's too big. Has it been persisted, and thus can we send a sync message?
 	if msg.ID == 0 {
-		logErr(errors.New("unable to send sync message via FCM for transient message"))
+		log.Error().Msg("encountered a sync message that is transient")
 		return
 	}
 
-	syncPayload := struct {
-		Type      string `json:"type"`
-		MessageID string `json:"message_id"`
-	}{Type: "message_sync_needed", MessageID: strconv.FormatInt(msg.ID, 10)}
-	sendFirebaseMessage(db, userID, syncPayload, urgent)
+	syncPayload := map[string]string{
+		"type":       "message_sync_needed",
+		"message_id": strconv.FormatInt(msg.ID, 10),
+	}
+	sendFirebaseMessage(db, fbClient, userID, syncPayload, urgent)
 	sendAPNSMessage(db, userID, syncPayload)
 }

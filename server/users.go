@@ -17,6 +17,7 @@ import (
 	"zood.dev/oscar/sodium"
 
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 )
 
 var validUsernamePattern = regexp.MustCompile(`^[a-z0-9]{5,}$`)
@@ -102,7 +103,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	if !validUsernamePattern.MatchString(user.Username) {
 		return nil, &serverError{code: errorInvalidUsername, message: "Usernames must be at least 5 characters long and may only contain lowercase letters (a-z) or numbers (0-9)."}
 	}
-	if user.PasswordSalt == nil || len(user.PasswordSalt) == 0 {
+	if len(user.PasswordSalt) == 0 {
 		return nil, &serverError{code: errorInvalidPasswordSalt, message: "Invalid password salt"}
 	}
 	var alg sodium.Algorithm
@@ -126,16 +127,16 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 			message: fmt.Sprintf("Invalid public key. Expected %d bytes. Found %d.", sodium.PublicKeySize, len(user.PublicKey)),
 		}
 	}
-	if user.WrappedSecretKey == nil || len(user.WrappedSecretKey) == 0 {
+	if len(user.WrappedSecretKey) == 0 {
 		return nil, &serverError{code: errorInvalidWrappedSecretKey, message: "Invalid wrapped secret key"}
 	}
-	if user.WrappedSecretKeyNonce == nil || len(user.WrappedSecretKeyNonce) == 0 {
+	if len(user.WrappedSecretKeyNonce) == 0 {
 		return nil, &serverError{code: errorInvalidWrappedSecretKeyNonce, message: "Invalid wrapped secret key nonce"}
 	}
-	if user.WrappedSymmetricKey == nil || len(user.WrappedSymmetricKey) == 0 {
+	if len(user.WrappedSymmetricKey) == 0 {
 		return nil, &serverError{code: errorInvalidWrappedSymmetricKey, message: "Invalid wrapped symmetric key"}
 	}
-	if user.WrappedSymmetricKeyNonce == nil || len(user.WrappedSymmetricKeyNonce) == 0 {
+	if len(user.WrappedSymmetricKeyNonce) == 0 {
 		return nil, &serverError{code: errorInvalidWrappedSymmetricKeyNonce, message: "Invalid wrapped symmetric key nonce"}
 	}
 	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
@@ -168,7 +169,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	// check if the username is already in use
 	available, err := db.UsernameAvailable(user.Username)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("db.UsernameAvailable")
 		return nil, newInternalErr()
 	}
 	if !available {
@@ -190,7 +191,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	}
 	id, err := db.InsertUser(userRec, emailVerificationToken)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("db.InsertUser")
 		return nil, newInternalErr()
 	}
 
@@ -201,14 +202,14 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	for idExists {
 		_, err = crand.Read(pubID)
 		if err != nil {
-			logErr(err)
+			log.Err(err).Msg("crand.Read")
 			return nil, newInternalErr()
 		}
 
 		// check if the id already exists
 		val, err := kvs.UserIDFromPublicID(pubID)
 		if err != nil {
-			logErr(err)
+			log.Err(err).Msg("kvs.UserIDFromPublicID")
 			return nil, newInternalErr()
 		}
 		if val > 0 {
@@ -219,7 +220,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 
 		err = kvs.InsertIds(id, pubID)
 		if err != nil {
-			logErr(err)
+			log.Err(err).Msg("kvs.InsertIds")
 			return nil, newInternalErr()
 		}
 	}
@@ -228,7 +229,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 		go func() {
 			err = sendVerificationEmail(*emailVerificationToken, user.Email, emailer)
 			if err != nil {
-				logErr(err)
+				log.Err(err).Msg("sending the verification email")
 			}
 		}()
 	}

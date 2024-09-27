@@ -3,7 +3,6 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // because, duh
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/model"
 )
 
@@ -415,7 +415,7 @@ func (db sqliteDB) schemaVersion() int {
 	var v int
 	err := db.dbx.QueryRow("PRAGMA user_version;").Scan(&v)
 	if err != nil {
-		log.Printf("There is no reason 'PRAMGA user_version' should fail: %v", err)
+		log.Err(err).Msg("There is no reason 'PRAMGA user_version' should fail")
 		panic(err)
 	}
 	return v

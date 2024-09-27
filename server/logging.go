@@ -3,79 +3,48 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/encodable"
 )
 
-// currLogLevel holds the current log detail desired
-var currLogLevel = logLevelError
+type callerAddingHook struct{}
 
-type logLevel int
-
-// Log level values
-const (
-	logLevelDebug logLevel = 1
-	logLevelInfo  logLevel = 2
-	logLevelWarn  logLevel = 3
-	logLevelError logLevel = 4
-)
-
-func validLogLevel(lvl int) bool {
-	switch logLevel(lvl) {
-	case logLevelDebug:
-	case logLevelInfo:
-	case logLevelWarn:
-	case logLevelError:
+func (h callerAddingHook) Run(e *zerolog.Event, level zerolog.Level, _ string) {
+	switch level {
+	case zerolog.ErrorLevel, zerolog.FatalLevel, zerolog.PanicLevel:
 	default:
-		return false
+		return
 	}
 
-	return true
+	e.Caller(3)
 }
 
 func shouldLogDebug() bool {
-	return currLogLevel <= logLevelDebug
+	return zerolog.GlobalLevel() <= zerolog.DebugLevel
 }
 
-func shouldLogInfo() bool {
-	return currLogLevel <= logLevelInfo
-}
-
-func shouldLogWarn() bool {
-	return currLogLevel <= logLevelWarn
-}
-
-func shouldLogError() bool {
-	return currLogLevel <= logLevelError
-}
-
-// logLevelHandler handles GET /log-level
-func logLevelHandler(w http.ResponseWriter, r *http.Request) {
-	sendSuccess(w, map[string]logLevel{
-		"log_level": currLogLevel,
-	})
-}
-
-// setLogLevelHandler handles PUT /log-level
-func setLogLevelHandler(w http.ResponseWriter, r *http.Request) {
-	body := struct {
-		LogLevel int `json:"log_level"`
-	}{}
-	err := json.NewDecoder(r.Body).Decode(&body)
-	if err != nil {
-		sendBadReq(w, "invalid PUT body")
-		return
+func initLogging() {
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	cw := zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: "2006-01-02T15:04:05",
 	}
+	log.Logger = zerolog.New(cw).With().Timestamp().Logger().Hook(callerAddingHook{})
+}
 
-	if !validLogLevel(body.LogLevel) {
-		sendBadReq(w, "invalid log level")
-		return
-	}
+func (api httpAPI) enableDebugLoggingHandler(w http.ResponseWriter, _ *http.Request) {
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("debug logging ENABLED"))
+}
 
-	currLogLevel = logLevel(body.LogLevel)
-	sendSuccess(w, map[string]logLevel{
-		"log_level": currLogLevel,
-	})
+func (api httpAPI) disableDebugLoggingHandler(w http.ResponseWriter, r *http.Request) {
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("debug logging DISABLED"))
 }
 
 func recordLogMessageHandler(w http.ResponseWriter, r *http.Request) {

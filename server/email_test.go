@@ -13,7 +13,7 @@ import (
 
 func TestVerifyEmailHandler(t *testing.T) {
 	prvdrs := createTestProviders(t)
-	handler := newOscarRouter(prvdrs)
+	handler := newOscarRouter(prvdrs, httpAPI{})
 	endpoint := "/1/email-verifications"
 
 	assertIsJSON := func(t *testing.T, w *httptest.ResponseRecorder) {

@@ -11,6 +11,10 @@ import (
 // implementation is to allow ease of use when writing to SQL databases as blobs.
 type Bytes []byte
 
+func (eb Bytes) Base64() string {
+	return base64.StdEncoding.EncodeToString(eb)
+}
+
 // MarshalJSON fulfills the json.Marshal interface
 func (eb Bytes) MarshalJSON() ([]byte, error) {
 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(eb)))

@@ -2,11 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
 	"zood.dev/oscar/model"
@@ -111,7 +110,7 @@ func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 func sendAPNSMessage(db model.Provider, userID int64, payload interface{}) {
 	tokens, err := db.APNSTokensRaw(userID)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("db.APNSTokensRaw")
 		return
 	}
 
@@ -132,7 +131,7 @@ func sendAPNSMessage(db model.Provider, userID int64, payload interface{}) {
 		n.DeviceToken = t
 		resp, err := apnsClient.Push(n)
 		if err != nil {
-			log.Printf("Error pushing to user %d with token %s: %v", userID, t, err)
+			log.Err(err).Int64("userId", userID).Str("token", t).Msg("pushing to APNS user")
 			continue
 		}
 		if !resp.Sent() {
@@ -140,13 +139,11 @@ func sendAPNSMessage(db model.Provider, userID int64, payload interface{}) {
 				// remove the token
 				err = db.DeleteAPNSToken(t)
 				if err != nil {
-					logErr(err)
+					log.Err(err).Msg("deleting an apns token")
 				}
 			} else {
-				err = errors.Errorf("Push to user %d failed because '%s'", userID, resp.Reason)
-				logErr(err)
+				log.Error().Int64("userId", userID).Str("reason", resp.Reason).Msg("APNS push failure reason")
 			}
 		}
 	}
-
 }

@@ -35,17 +35,15 @@ type serverConfig struct {
 		GCPCredentialsPath   string `json:"gcp_credentials_path"`
 		LocalDiskStoragePath string `json:"local_disk_storage_path"`
 	} `json:"file_storage"`
-	FCMServerKey    string `json:"fcm_server_key"`
-	Hostname        string `json:"hostname"`
-	KVDBDirectory   string `json:"kv_db_directory"`
-	Port            *int   `json:"port,omitempty"`
-	SQLDBDirectory  string `json:"sql_db_directory"`
-	SymmetricKey    []byte `json:"-"`
-	SymmetricKeyHex string `json:"symmetric_key"`
-	TLS             *bool  `json:"tls,omitempty"`
+	FCMCredentialsPath string `json:"fcm_credentials_path"`
+	Hostname           string `json:"hostname"`
+	KVDBDirectory      string `json:"kv_db_directory"`
+	Port               *int   `json:"port,omitempty"`
+	SQLDBDirectory     string `json:"sql_db_directory"`
+	SymmetricKey       []byte `json:"-"`
+	SymmetricKeyHex    string `json:"symmetric_key"`
+	TLS                *bool  `json:"tls,omitempty"`
 }
-
-// var config *serverConfig
 
 func loadConfig(confPath string) (*serverConfig, error) {
 	f, err := os.Open(confPath)
@@ -91,10 +89,9 @@ func loadConfig(confPath string) (*serverConfig, error) {
 	}
 
 	// Firebase cloud messaging
-	if cfg.FCMServerKey == "" {
-		return nil, errors.New("fcm_server_key is empty/missing")
+	if cfg.FCMCredentialsPath == "" {
+		return nil, errors.New("fcm_credentials_path is empty/missing")
 	}
-	gFCMServerKey = cfg.FCMServerKey
 
 	// Apple push notifications
 	if cfg.APNS.KeyID == "" {

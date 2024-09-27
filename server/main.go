@@ -1,17 +1,20 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"time"
 
+	firebase "firebase.google.com/go/v4"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/acme/autocert"
+	"google.golang.org/api/option"
 	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/gcs"
@@ -31,33 +34,31 @@ var defaultCiphers = []uint16{
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	initLogging()
 
 	configPath := flag.String("config", "", "Path to config file")
-	lvl := flag.Int("log-level", 4, "Controls the amount of info logged. Range from 1-4. Default is 4, errors only.")
+	debugLogs := flag.Bool("debug", false, "Enable debug logs")
 	flag.Parse()
 
-	if !validLogLevel(*lvl) {
-		log.Fatalf("Invalid log level (%d). Must be between 1-4, inclusive.", *lvl)
+	if *debugLogs {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
-
-	currLogLevel = logLevel(*lvl)
 
 	config, err := loadConfig(*configPath)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("loading config")
 	}
 
 	dsn := fmt.Sprintf("file:%s", filepath.Join(config.SQLDBDirectory, "sqlite.db"))
 	rs, err := sqlite.New(dsn)
 	if err != nil {
-		log.Fatalf("Unable to open sqlite db: %v", err)
+		log.Fatal().Err(err).Msg("opening sqlite db")
 	}
 
 	kvdbPath := filepath.Join(config.KVDBDirectory, "kv.db")
 	kvs, err := boltdb.New(kvdbPath)
 	if err != nil {
-		log.Fatalf("Unable to open boltdb: %v", err)
+		log.Fatal().Err(err).Msg("opening boltdb")
 	}
 
 	var fs filestor.Provider
@@ -65,18 +66,27 @@ func main() {
 	case "localdisk":
 		fs, err = localdisk.New(config.FileStorage.LocalDiskStoragePath)
 		if err != nil {
-			log.Fatalf("Failed to create localdisk based filestor: %v", err)
+			log.Fatal().Err(err).Msg("createing localdisk based filestor")
 		}
 	case "gcs":
 		fs, err = gcs.New(config.FileStorage.GCPCredentialsPath, config.FileStorage.GCPBucketName)
 		if err != nil {
-			log.Fatalf("Failed to create google cloud storage based filestor: %v", err)
+			log.Fatal().Err(err).Msg("creating google cloud storage based filestor")
 		}
 	default:
-		log.Fatalf("Unknown filestor type: '%s'", config.FileStorage.Type)
+		log.Fatal().Str("fileStorageType", config.FileStorage.Type).Msg("unknown filestor type")
 	}
 
 	emailer := mailgun.New(config.Email.MailgunAPIKey, config.Email.Domain)
+
+	fcmApp, err := firebase.NewApp(context.Background(), nil, option.WithCredentialsFile(config.FCMCredentialsPath))
+	if err != nil {
+		log.Fatal().Err(err).Msg("creating firebase app")
+	}
+	fcm, err := fcmApp.Messaging(context.Background())
+	if err != nil {
+		log.Fatal().Err(err).Msg("creating firebase messaging client")
+	}
 
 	// playground()
 	providers := &serverProviders{
@@ -90,13 +100,18 @@ func main() {
 			Secret: config.AsymmetricKeys.Secret,
 		},
 	}
-	router := newOscarRouter(providers)
+
+	api := httpAPI{
+		db:  rs,
+		fcm: fcm,
+		kvs: kvs,
+	}
+	router := newOscarRouter(providers, api)
 
 	hostAddress := fmt.Sprintf(":%d", *config.Port)
-	server := http.Server{
+	httpSrvr := http.Server{
 		Addr:         hostAddress,
 		Handler:      router,
-		ErrorLog:     log.New(&tlsHandshakeFilter{}, "", 0),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -107,7 +122,6 @@ func main() {
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers
 		tlsConfig.MinVersion = tls.VersionTLS12
-		tlsConfig.PreferServerCipherSuites = true
 		tlsConfig.CurvePreferences = []tls.CurveID{
 			tls.CurveP256,
 			tls.X25519,
@@ -118,19 +132,23 @@ func main() {
 			Cache:      autocert.DirCache(config.AutocertDirCache),
 		}
 		tlsConfig.GetCertificate = m.GetCertificate
-		server.TLSConfig = tlsConfig
+		httpSrvr.TLSConfig = tlsConfig
 		go http.ListenAndServe(":http", m.HTTPHandler(nil)) // this just runs for the sake of the autocert manager
-		log.Fatal(server.ListenAndServeTLS("", ""))
+		if err := httpSrvr.ListenAndServeTLS("", ""); err != nil {
+			log.Fatal().Err(err).Msg("http.ListenAndServeTLS")
+		}
 	} else {
-		log.Fatal(server.ListenAndServe())
+		if err := httpSrvr.ListenAndServe(); err != nil {
+			log.Fatal().Err(err).Msg("http.ListenAndServe")
+		}
 	}
 }
 
-func newOscarRouter(p *serverProviders) http.Handler {
+func newOscarRouter(p *serverProviders, api httpAPI) http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/server-info", serverInfoHandler).Methods(http.MethodGet, http.MethodOptions)
-	r.HandleFunc("/log-level", logLevelHandler).Methods(http.MethodGet, http.MethodOptions)
-	// r.HandleFunc("/log-level", setLogLevelHandler).Methods(http.MethodPut, http.MethodOptions)
+	r.HandleFunc("/enable-debug", api.enableDebugLoggingHandler).Methods(http.MethodGet)
+	r.HandleFunc("/disable-debug", api.disableDebugLoggingHandler).Methods(http.MethodGet)
 	v1 := r.PathPrefix("/1").Subrouter()
 
 	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
@@ -142,7 +160,7 @@ func newOscarRouter(p *serverProviders) http.Handler {
 	v1.Handle("/users/me/backup", sessionHandler(retrieveBackupHandler)).Methods(http.MethodGet, http.MethodOptions)
 	v1.Handle("/users/me/backup", sessionHandler(saveBackupHandler)).Methods(http.MethodPut, http.MethodOptions)
 	v1.Handle("/users/{public_id}", sessionHandler(getUserInfoHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/users/{public_id}/messages", sessionHandler(sendMessageToUserHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/{public_id}/messages", sessionHandler(api.sendMessageToUserHandler)).Methods(http.MethodPost, http.MethodOptions)
 	v1.HandleFunc("/users/{public_id}/public-key", getUserPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
 	v1.Handle("/messages", sessionHandler(getMessagesHandler)).Methods(http.MethodGet, http.MethodOptions)
@@ -176,15 +194,4 @@ func newOscarRouter(p *serverProviders) http.Handler {
 	r.Use(logMiddleware, corsMiddleware, p.Middleware)
 
 	return r
-}
-
-type tlsHandshakeFilter struct{}
-
-func (dl *tlsHandshakeFilter) Write(p []byte) (int, error) {
-	if bytes.Contains(p, []byte("TLS handshake error from")) {
-		return len(p), nil // lie to the caller
-	}
-
-	log.Printf("%s", p)
-	return len(p), nil
 }

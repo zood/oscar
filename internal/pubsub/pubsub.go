@@ -1,8 +1,10 @@
 package pubsub
 
 import (
-	"log"
+	"fmt"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 )
 
 // PubSub is a hub for sending and receiving messages on different topics
@@ -28,9 +30,11 @@ func (ps *PubSub) Pub(msg []byte, topic string) bool {
 		}
 		willPublish = true
 		go func(s chan []byte) {
+			// TODO: Are we recovering in case the channel is closed? If so, we need to fix this.
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Recovered a panic during pub(): %v", r)
+					fmt.Println(r)
+					log.Error().Interface("panic", r).Msg("recovered a panic during PubSub.Pub()")
 				}
 			}()
 			s <- msg

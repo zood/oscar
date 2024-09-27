@@ -2,7 +2,7 @@ package mailgun
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,7 +49,7 @@ func (mg *mailgun) SendEmail(from string, to string, subj string, textMsg string
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			buf, err := ioutil.ReadAll(resp.Body)
+			buf, err := io.ReadAll(resp.Body)
 			if err == nil {
 				return fmt.Errorf("mailgun non-OK response - %s", buf)
 			}

@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/hex"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/internal/pubsub"
 	"zood.dev/oscar/kvstor"
 )
@@ -114,7 +114,7 @@ func (ss socketServer) watchBox(boxID []byte) {
 	// If there's already a package in the dropbox, send it
 	tmp, err := ss.kvs.PickUpPackage(boxID)
 	if err != nil {
-		logErr(err)
+		log.Err(err).Msg("kvs.PickUpPackage")
 	}
 	if len(tmp) > 0 {
 		sub <- tmp

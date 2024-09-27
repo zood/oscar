@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
 
+	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/filestor"
 )
 
@@ -18,8 +18,8 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	providers := providersCtx(r.Context())
 	db := providers.db
-	if shouldLogInfo() {
-		log.Printf("download_backup: %s", db.Username(userID))
+	if shouldLogDebug() {
+		log.Debug().Str("username", db.Username(userID)).Msg("download_backup")
 	}
 
 	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
@@ -40,11 +40,11 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	providers := providersCtx(r.Context())
 	db := providers.db
-	if shouldLogInfo() {
-		log.Printf("backup: %s", db.Username(userID))
+	if shouldLogDebug() {
+		log.Debug().Str("username", db.Username(userID)).Msg("backup")
 	}
 
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		sendBadReq(w, "Unable to read PUT body: "+err.Error())
 		return
