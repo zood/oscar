@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	golog "log"
+
 	firebase "firebase.google.com/go/v4"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
@@ -122,9 +124,10 @@ func main() {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
+		ErrorLog:     golog.New(tlsErrorFilter{}, "", 0),
 	}
 
-	log.Printf("Starting server for %s:%d", config.Hostname, *config.Port)
+	log.Info().Str("hostname", config.Hostname).Int("port", *config.Port).Msg("starting server")
 	if *config.TLS {
 		tlsConfig := &tls.Config{}
 		tlsConfig.CipherSuites = defaultCiphers

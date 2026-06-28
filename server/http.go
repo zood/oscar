@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +17,28 @@ import (
 	"zood.dev/oscar/sodium"
 )
 
+var tlsHandshakeError = []byte("http: TLS handshake error")
+
+type tlsErrorFilter struct{}
+
+func (tef tlsErrorFilter) Write(p []byte) (n int, err error) {
+	if bytes.Contains(p, tlsHandshakeError) {
+		// We don't want to log handshake errors, because they happen
+		// continuously and add noise to the logs.
+		return len(p), nil
+	}
+
+	if len(p) > 0 && p[len(p)-1] == '\n' {
+		// messages from the http server typically have a newline at the end.
+		// The zerolog logger also adds a newline, so trim the last character
+		// off the buffer to avoid empty lines in the logs.
+		p = p[:len(p)-1]
+	}
+	log.Debug().Msg(string(p))
+
+	return len(p), nil
+}
+
 type httpAPI struct {
 	db      model.Provider
 	emailer smtp.SendEmailer
@@ -28,9 +51,7 @@ type httpAPI struct {
 
 func logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if shouldLogDebug() {
-			log.Printf("%s %s (%s)", r.Method, r.URL.Path, r.RemoteAddr)
-		}
+		log.Debug().Str("method", r.Method).Str("path", r.URL.Path).Str("remoteAddr", r.RemoteAddr).Msg("http request")
 
 		defer func() {
 			if r := recover(); r != nil {

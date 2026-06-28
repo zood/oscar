@@ -40,7 +40,7 @@ type packageListener struct {
 
 func (pl *packageListener) ignore(boxID []byte) {
 	if len(boxID) != dropBoxIDSize {
-		log.Printf("invalid drop box id length (%d)", len(boxID))
+		log.Debug().Int("length", len(boxID)).Msg("invalid drop box id length")
 		return
 	}
 	hexID := hex.EncodeToString(boxID)
@@ -48,7 +48,7 @@ func (pl *packageListener) ignore(boxID []byte) {
 	// find the channel of this subscription
 	sr, ok := pl.subs[hexID]
 	if !ok {
-		log.Printf("received 'ignore' for non-existent subscription")
+		log.Debug().Msg("received 'ignore' for non-existent subscription")
 		return
 	}
 

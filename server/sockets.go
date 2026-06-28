@@ -38,7 +38,7 @@ func (ss socketServer) ignoreBox(boxID []byte) {
 	sub := ss.pkgSubs[hexID]
 	if sub == nil {
 		// We don't have a subscription for this box. Client error!
-		log.Printf("A client tried unsubscribing from a drop box to which they hadn't subscribed")
+		log.Debug().Msg("A client tried unsubscribing from a drop box to which they hadn't subscribed")
 		return
 	}
 	dropBoxPubSub.Unsub(sub, hexID)
@@ -54,11 +54,11 @@ func (ss socketServer) readConn() {
 			break
 		}
 		if msgType != websocket.BinaryMessage {
-			log.Printf("received a non-binary message")
+			log.Debug().Msg("received a non-binary message")
 			break
 		}
 		if len(buf) == 0 {
-			log.Printf("received an invalid length message")
+			log.Debug().Msg("received an invalid length message")
 			continue
 		}
 		switch buf[0] {
@@ -68,7 +68,7 @@ func (ss socketServer) readConn() {
 		case socketClientCmdIgnore:
 			ss.ignoreBox(buf[1:])
 		default:
-			log.Printf("unknown socket command: %d", buf[0])
+			log.Debug().Int8("command", int8(buf[0])).Msg("unknown socket command")
 		}
 	}
 }
@@ -96,14 +96,14 @@ func (ss socketServer) stop() {
 
 func (ss socketServer) watchBox(boxID []byte) {
 	if len(boxID) != dropBoxIDSize {
-		log.Printf("invalid drop box id length (%d)", len(boxID))
+		log.Debug().Int("length", len(boxID)).Msg("invalid drop box id length")
 		return
 	}
 	hexID := hex.EncodeToString(boxID)
 
 	// if there's already a sub for this id, skip it
 	if ss.pkgSubs[hexID] != nil {
-		log.Printf("A client requested a 'watch' for the same box more than once")
+		log.Debug().Msg("A client requested a 'watch' for the same box more than once")
 		return
 	}
 
