@@ -102,9 +102,16 @@ func main() {
 	}
 
 	api := httpAPI{
-		db:  rs,
-		fcm: fcm,
-		kvs: kvs,
+		db:      rs,
+		emailer: emailer,
+		fcm:     fcm,
+		fs:      fs,
+		keyPair: sodium.KeyPair{
+			Public: config.AsymmetricKeys.Public,
+			Secret: config.AsymmetricKeys.Secret,
+		},
+		kvs:    kvs,
+		symKey: config.SymmetricKey,
 	}
 	router := newOscarRouter(providers, api)
 
@@ -125,6 +132,7 @@ func main() {
 		tlsConfig.CurvePreferences = []tls.CurveID{
 			tls.CurveP256,
 			tls.X25519,
+			tls.X25519MLKEM768,
 		}
 		m := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
@@ -152,9 +160,10 @@ func newOscarRouter(p *serverProviders, api httpAPI) http.Handler {
 	v1 := r.PathPrefix("/1").Subrouter()
 
 	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.HandleFunc("/users", createUserHandler).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/users/me/apns-tokens", sessionHandler(addAPNSTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(deleteAPNSTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.HandleFunc("/users", api.createUser).Methods(http.MethodPost, http.MethodOptions)
+	// v1.HandleFunc("/users", api.deleteUser).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens", sessionHandler(api.addAPNSToken)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(api.deleteAPNSToken)).Methods(http.MethodDelete, http.MethodOptions)
 	v1.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
 	v1.Handle("/users/me/fcm-tokens/{token}", sessionHandler(deleteFCMTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
 	v1.Handle("/users/me/backup", sessionHandler(retrieveBackupHandler)).Methods(http.MethodGet, http.MethodOptions)
@@ -168,10 +177,10 @@ func newOscarRouter(p *serverProviders, api httpAPI) http.Handler {
 	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(deleteMessageHandler)).Methods(http.MethodDelete, http.MethodOptions)
 
 	// this has to come first, so it has a chance to match before the box_id urls
-	v1.HandleFunc("/drop-boxes/watch", createPackageWatcherHandler).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/drop-boxes/send", sessionHandler(sendMultiplePackagesHandler)).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(pickUpPackageHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(dropPackageHandler)).Methods(http.MethodPut, http.MethodOptions)
+	v1.HandleFunc("/drop-boxes/watch", api.createPackageWatcher).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/drop-boxes/send", sessionHandler(api.sendMultiplePackages)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.pickUpPackage)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.dropPackage)).Methods(http.MethodPut, http.MethodOptions)
 
 	v1.HandleFunc("/public-key", getServerPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
@@ -186,7 +195,6 @@ func newOscarRouter(p *serverProviders, api httpAPI) http.Handler {
 	v1.HandleFunc("/email-verifications/{token}", disavowEmailHandler).Methods(http.MethodDelete, http.MethodOptions)
 
 	v1.HandleFunc("/goroutine-stacks", goroutineStacksHandler).Methods(http.MethodGet, http.MethodOptions)
-	v1.HandleFunc("/logs", recordLogMessageHandler).Methods(http.MethodGet, http.MethodOptions)
 
 	r.NotFoundHandler = http.HandlerFunc(notFoundHandler)
 	r.MethodNotAllowedHandler = http.HandlerFunc(notFoundHandler)

@@ -7,6 +7,7 @@ package sodium
 #include <stdlib.h>
 */
 import "C"
+
 import (
 	crand "crypto/rand"
 	"encoding/hex"
@@ -49,7 +50,8 @@ var Argon2i13 = Algorithm{
 	OpsLimitSensitive:   C.crypto_pwhash_argon2i_OPSLIMIT_SENSITIVE,
 	MemLimitInteractive: C.crypto_pwhash_argon2i_MEMLIMIT_INTERACTIVE,
 	MemLimitModerate:    C.crypto_pwhash_argon2i_MEMLIMIT_MODERATE,
-	MemLimitSensitive:   C.crypto_pwhash_argon2i_MEMLIMIT_SENSITIVE}
+	MemLimitSensitive:   C.crypto_pwhash_argon2i_MEMLIMIT_SENSITIVE,
+}
 
 // Argon2id13 is the newer/better password stretching algorithm
 var Argon2id13 = Algorithm{
@@ -61,7 +63,8 @@ var Argon2id13 = Algorithm{
 	OpsLimitSensitive:   C.crypto_pwhash_argon2id_OPSLIMIT_SENSITIVE,
 	MemLimitInteractive: C.crypto_pwhash_argon2id_MEMLIMIT_INTERACTIVE,
 	MemLimitModerate:    C.crypto_pwhash_argon2id_MEMLIMIT_MODERATE,
-	MemLimitSensitive:   C.crypto_pwhash_argon2id_MEMLIMIT_SENSITIVE}
+	MemLimitSensitive:   C.crypto_pwhash_argon2id_MEMLIMIT_SENSITIVE,
+}
 
 // SymmetricKeySize is the length in bytes of a key for symmetric crypto operations
 const SymmetricKeySize = C.crypto_secretbox_KEYBYTES
@@ -81,10 +84,12 @@ const SecretKeySize = C.crypto_box_SECRETKEYBYTES
 // PasswordStretchingSaltSize is the size in bytes of the salt required for stretching a password
 const PasswordStretchingSaltSize = C.crypto_pwhash_SALTBYTES
 
-const boxNonceSize = C.crypto_box_NONCEBYTES
-const boxMACSize = C.crypto_box_MACBYTES
-const secretBoxMACSize = C.crypto_secretbox_MACBYTES
-const secretBoxNonceSize = C.crypto_secretbox_NONCEBYTES
+const (
+	boxNonceSize       = C.crypto_box_NONCEBYTES
+	boxMACSize         = C.crypto_box_MACBYTES
+	secretBoxMACSize   = C.crypto_secretbox_MACBYTES
+	secretBoxNonceSize = C.crypto_secretbox_NONCEBYTES
+)
 
 func (kp KeyPair) String() string {
 	return fmt.Sprintf("public: %s\nsecret: %s",
@@ -143,9 +148,8 @@ func PublicKeyEncrypt(msg, receiverPubKey, senderSecretKey []byte) (cipherText, 
 }
 
 // Random overwrites b with random data.
-func Random(b []byte) error {
-	_, err := crand.Read(b)
-	return err
+func Random(b []byte) {
+	crand.Read(b)
 }
 
 // StretchPassword stretches a password to keySize bytes

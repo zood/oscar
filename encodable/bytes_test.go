@@ -14,9 +14,7 @@ type message struct {
 
 func TestJSONSerialization(t *testing.T) {
 	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		t.Fatal(err)
-	}
+	rand.Read(buf)
 
 	msg := message{
 		Buffer: buf,

@@ -194,25 +194,25 @@ func parseDropBoxID(w http.ResponseWriter, r *http.Request) ([]byte, string, boo
 	return boxID, boxIDStr, true
 }
 
-// pickUpPackageHandler handles GET /drop-boxes/{box_id}
-func pickUpPackageHandler(w http.ResponseWriter, r *http.Request) {
+// pickUpPackage handles GET /drop-boxes/{box_id}
+func (api httpAPI) pickUpPackage(w http.ResponseWriter, r *http.Request) {
 	boxID, _, ok := parseDropBoxID(w, r)
 	if !ok {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	kvs := providersCtx(r.Context()).kvs
-	pkg, err := kvs.PickUpPackage(boxID)
+	pkg, err := api.kvs.PickUpPackage(boxID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 	w.Write(pkg)
 }
 
 // sendMultiplePackagesHandler handles POST /drop-boxes/send
-func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) sendMultiplePackages(w http.ResponseWriter, r *http.Request) {
 	rdr, err := r.MultipartReader()
 	if err != nil {
 		sendBadReq(w, "unable to read multipart request: "+err.Error())
@@ -221,7 +221,6 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 
 	var boxes string
 
-	providers := providersCtx(r.Context())
 	// build the map of boxes => packages
 	pkgs := make(map[string][]byte)
 	for {
@@ -258,13 +257,11 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if shouldLogDebug() {
 		userID := userIDFromContext(r.Context())
-		db := providers.db
-		log.Debug().Str("username", db.Username(userID)).Str("boxes", boxes).Msg("drop_multiple_packages")
+		log.Debug().Str("username", api.db.Username(userID)).Str("boxes", boxes).Msg("drop_multiple_packages")
 	}
-	kvs := providers.kvs
 	for hexBoxID, pkg := range pkgs {
 		boxID, _ := hex.DecodeString(hexBoxID)
-		err := kvs.DropPackage(pkg, boxID)
+		err := api.kvs.DropPackage(pkg, boxID)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -281,53 +278,37 @@ func sendMultiplePackagesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // dropPackageHandler handles PUT /drop-boxes/{box_id}
-func dropPackageHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) dropPackage(w http.ResponseWriter, r *http.Request) {
 	boxID, hexBoxID, ok := parseDropBoxID(w, r)
 	if !ok {
 		return
 	}
 
-	providers := providersCtx(r.Context())
+	log.Debug().Msg("dropPkg: about to read request body")
 
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: about to read request body")
-	}
 	pkg, err := io.ReadAll(r.Body)
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: read request error? %v", err)
-	}
 	if err != nil {
+		log.Debug().Err(err).Msg("dropPkg: read request")
 		sendBadReq(w, "unable to read PUT body: "+err.Error())
 		return
 	}
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: about to update the bucket")
-	}
-	kvs := providers.kvs
-	err = kvs.DropPackage(pkg, boxID)
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: bucket update error? %v", err)
-	}
+
+	log.Debug().Msg("dropPkg: about to update the bucket")
+	err = api.kvs.DropPackage(pkg, boxID)
 	if err != nil {
+		log.Debug().Err(err).Msg("dropPkg: bucket update")
 		sendInternalErr(w, err)
 		return
 	}
 
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: sending success")
-	}
 	sendSuccess(w, nil)
 
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: about to publish package")
-	}
+	log.Debug().Msg("dropPkg: about to publish package")
 	dropBoxPubSub.Pub(pkg, hexBoxID)
-	if shouldLogDebug() {
-		log.Printf("\tdropPkg: done publishing")
-	}
+	log.Debug().Msg("dropPkg: done publishing")
 }
 
-func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) createPackageWatcher(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("create_package_watcher")
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -340,7 +321,6 @@ func createPackageWatcherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := providersCtx(r.Context()).kvs
-	pl := newPackageListener(conn, kvs)
+	pl := newPackageListener(conn, api.kvs)
 	pl.start()
 }

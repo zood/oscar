@@ -9,14 +9,21 @@ import (
 
 	"firebase.google.com/go/v4/messaging"
 	"github.com/rs/zerolog/log"
+	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
 	"zood.dev/oscar/model"
+	"zood.dev/oscar/smtp"
+	"zood.dev/oscar/sodium"
 )
 
 type httpAPI struct {
-	db  model.Provider
-	fcm *messaging.Client
-	kvs kvstor.Provider
+	db      model.Provider
+	emailer smtp.SendEmailer
+	fcm     *messaging.Client
+	fs      filestor.Provider
+	keyPair sodium.KeyPair
+	kvs     kvstor.Provider
+	symKey  []byte
 }
 
 func logMiddleware(next http.Handler) http.Handler {

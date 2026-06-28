@@ -24,7 +24,6 @@ var validUsernamePattern = regexp.MustCompile(`^[a-z0-9]{5,}$`)
 
 const publicUserIDSize = 16
 
-// User ...
 type User struct {
 	ID                          int64           `json:"-" db:"id"`
 	PublicID                    encodable.Bytes `json:"id,omitempty"`
@@ -65,8 +64,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// createUserHandler handles POST /users
-func createUserHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) createUser(w http.ResponseWriter, r *http.Request) {
 	user := User{}
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
@@ -74,12 +72,10 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	providers := providersCtx(ctx)
-	pubID, sErr := createUser(providers.db, providers.kvs, providers.emailer, user)
+	pubID, sErr := createUser(api.db, api.kvs, api.emailer, user)
 	if sErr != nil {
 		if sErr.code == errorInternal {
-			sendInternalErr(w, err)
+			sendInternalErr(w, sErr)
 		} else {
 			sendBadReqCode(w, sErr.message, sErr.code)
 		}
@@ -200,11 +196,7 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	idExists := true
 
 	for idExists {
-		_, err = crand.Read(pubID)
-		if err != nil {
-			log.Err(err).Msg("crand.Read")
-			return nil, newInternalErr()
-		}
+		crand.Read(pubID)
 
 		// check if the id already exists
 		val, err := kvs.UserIDFromPublicID(pubID)

@@ -41,7 +41,7 @@ func createAPNSClient(p8Path, keyID, teamID string, production bool) error {
 	return nil
 }
 
-func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) addAPNSToken(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 
 	body := struct {
@@ -59,15 +59,14 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	db := providersCtx(r.Context()).db
-	atr, err := db.APNSToken(body.Token)
+	atr, err := api.db.APNSToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 	if atr == nil {
 		// insert the token, then return
-		err = db.InsertAPNSToken(userID, body.Token)
+		err = api.db.InsertAPNSToken(userID, body.Token)
 		if err != nil {
 			sendInternalErr(w, err)
 		}
@@ -84,7 +83,7 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.UpdateUserIDOfAPNSToken(userID, body.Token)
+	err = api.db.UpdateUserIDOfAPNSToken(userID, body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -92,13 +91,12 @@ func addAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func deleteAPNSTokenHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) deleteAPNSToken(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 
 	token := mux.Vars(r)["token"]
 
-	db := providersCtx(r.Context()).db
-	err := db.DeleteAPNSTokenOfUser(userID, token)
+	err := api.db.DeleteAPNSTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

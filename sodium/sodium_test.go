@@ -71,10 +71,7 @@ func TestPublicKeyCrypto(t *testing.T) {
 
 func TestRandom(t *testing.T) {
 	buf := make([]byte, 32)
-	err := Random(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
+	Random(buf)
 
 	if bytes.Equal(buf, make([]byte, 32)) {
 		t.Fatal("Slice does not contain random data")

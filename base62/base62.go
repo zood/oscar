@@ -20,9 +20,6 @@ func Rand(length uint) string {
 
 func randUint8() uint8 {
 	b := make([]byte, 1)
-	if _, err := crand.Read(b); err != nil {
-		panic(err)
-	}
-
+	crand.Read(b)
 	return uint8(b[0])
 }

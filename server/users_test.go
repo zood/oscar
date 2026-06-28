@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -160,7 +158,7 @@ func TestCreateUserWithEmail(t *testing.T) {
 }
 
 func TestCreateUserHandler(t *testing.T) {
-	providers := createTestProviders(t)
+	api := testHTTPAPI(t)
 	user := User{Username: "Arash"}
 	salt := make([]byte, sodium.PasswordStretchingSaltSize)
 	sodium.Random(salt)
@@ -178,40 +176,24 @@ func TestCreateUserHandler(t *testing.T) {
 
 	data, _ := json.Marshal(user)
 	r := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(data))
-	ctx := context.WithValue(r.Context(), contextServerProvidersKey, providers)
-	r = r.WithContext(ctx)
 	w := httptest.NewRecorder()
 
-	createUserHandler(w, r)
+	api.createUser(w, r)
 
 	resp := struct {
 		ID encodable.Bytes `json:"id"`
 	}{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.ID == nil {
-		t.Fatal("did not receive a public id")
-	}
-	if len(resp.ID) != publicUserIDSize {
-		t.Fatalf("user id is the wrong size (%d). Got %s", len(resp.ID), hex.EncodeToString(resp.ID))
-	}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	require.NotNil(t, resp.ID, "expected a public id")
+	require.Len(t, resp.ID, publicUserIDSize, "user id size")
 
-	arash, err := providers.db.User(strings.ToLower(user.Username))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if arash == nil {
-		t.Fatal("user not found")
-	}
-	uid, err := providers.kvs.UserIDFromPublicID(resp.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if uid < 1 {
-		t.Fatal("invalid user id")
-	}
-	if arash.ID != uid {
-		t.Fatalf("user id mismatch: %d != %d", arash.ID, uid)
-	}
+	arash, err := api.db.User(strings.ToLower(user.Username))
+	require.NoError(t, err)
+	require.NotNil(t, arash, "user not found")
+
+	uid, err := api.kvs.UserIDFromPublicID(resp.ID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, uid, int64(1), "invalid user id")
+	require.Equal(t, arash.ID, uid, "ids should match after retrieval")
 }

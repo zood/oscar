@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"zood.dev/oscar/encodable"
 )
 
 type callerAddingHook struct{}
@@ -45,20 +43,4 @@ func (api httpAPI) disableDebugLoggingHandler(w http.ResponseWriter, r *http.Req
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("debug logging DISABLED"))
-}
-
-func recordLogMessageHandler(w http.ResponseWriter, r *http.Request) {
-	postBody := struct {
-		UserID    encodable.Bytes `json:"user_id"`
-		Timestamp int64           `json:"timestamp"`
-		Message   string          `json:"message"`
-	}{}
-
-	err := json.NewDecoder(r.Body).Decode(&postBody)
-	if err != nil {
-		sendBadReq(w, "Failed to decode post body: "+err.Error())
-		return
-	}
-
-	sendSuccess(w, nil)
 }
