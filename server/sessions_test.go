@@ -18,14 +18,14 @@ import (
 	"zood.dev/oscar/sqlite"
 )
 
-func loginTestUser(t *testing.T, providers *serverProviders, user User, userKeyPair sodium.KeyPair) (accessToken string) {
+func loginTestUser(t *testing.T, api httpAPI, user User, userKeyPair sodium.KeyPair) (accessToken string) {
 	t.Helper()
 
 	creationDate := time.Now().Unix()
 	challenge := make([]byte, 255)
 	crand.Read(challenge)
 
-	cdCT, cdNonce, err := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), providers.keyPair.Public, userKeyPair.Secret)
+	cdCT, cdNonce, err := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), api.keyPair.Public, userKeyPair.Secret)
 	require.NoError(t, err)
 
 	token := sessionToken{
@@ -35,29 +35,24 @@ func loginTestUser(t *testing.T, providers *serverProviders, user User, userKeyP
 	}
 	tokenBytes, err := json.Marshal(token)
 	require.NoError(t, err)
-	tokenCT, tokeNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, providers.symKey)
+	tokenCT, tokeNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, api.symKey)
 	require.NoError(t, err)
 	accessTokenBytes := append(tokeNonce, tokenCT...)
 	accessToken = base64.StdEncoding.EncodeToString(accessTokenBytes)
-	providers.db.InsertAccessToken(accessToken, user.ID, time.Now().Add(24*time.Hour).Unix())
+	api.db.InsertAccessToken(accessToken, user.ID, time.Now().Add(24*time.Hour).Unix())
 	return
 }
 
 func TestCreateTicketHandler(t *testing.T) {
-	db, _ := sqlite.New(sqlite.InMemoryDSN)
 	var userID int64 = 34
-
 	r := httptest.NewRequest(http.MethodPost, "/sessions/expiring-tickets", nil)
 	ctx := context.WithValue(r.Context(), contextUserIDKey, userID)
-	providers := &serverProviders{
-		db: db,
-	}
-	ctx = context.WithValue(ctx, contextServerProvidersKey, providers)
 	r = r.WithContext(ctx)
 
 	w := httptest.NewRecorder()
 
-	createTicketHandler(w, r)
+	api := testHTTPAPI(t)
+	api.createTicketHandler(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected 200. Got %d: %s", w.Code, w.Body.Bytes())
 	}
@@ -69,19 +64,17 @@ func TestCreateTicketHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(respBody.Ticket) != ticketLength {
-		t.Fatalf("Incorrect ticket size. Expected %d, got %d", ticketLength, len(respBody.Ticket))
-	}
+	require.Len(t, respBody.Ticket, ticketLength, "Ticket size check")
 
 	// make sure it's in the database
-	retrieved, _, _ := db.Ticket(respBody.Ticket)
+	retrieved, _, _ := api.db.Ticket(respBody.Ticket)
 	if retrieved != userID {
 		t.Fatalf("ticket not found or wrong user id. Got %d", retrieved)
 	}
 }
 
 func TestVerifySessionTicket(t *testing.T) {
-	db, _ := sqlite.New(sqlite.InMemoryDSN)
+	db := sqlite.NewMockDB(t)
 
 	userID, err := verifySessionTicket(db, "")
 	if err != nil {
@@ -108,7 +101,7 @@ func TestVerifySessionTicket(t *testing.T) {
 	expectedUserID = 24
 	db.InsertTicket(ticket, expectedUserID)
 	// manually change the timestamp to something older
-	sqldb := db.(sqlite.Databaser).Database()
+	sqldb := db.Database()
 	_, err = sqldb.Exec(`UPDATE tickets SET timestamp=? WHERE ticket=?`, time.Now().Unix()-120, ticket)
 	if err != nil {
 		t.Fatal(err)
@@ -124,13 +117,13 @@ func TestVerifySessionTicket(t *testing.T) {
 }
 
 func TestCreateAuthChallengeHandler(t *testing.T) {
-	providers := createTestProviders(t)
-	user, _ := createTestUser(t, providers)
+	api := testHTTPAPI(t)
+	user, _ := createTestUser(t, api.db, api.kvs)
 
 	r := httptest.NewRequest(http.MethodPost, "/1/sessions/"+user.Username+"/challenge", nil)
 	w := httptest.NewRecorder()
 
-	router := newOscarRouter(providers, httpAPI{})
+	router := newOscarRouter(api)
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
@@ -173,7 +166,7 @@ func TestCreateAuthChallengeHandler(t *testing.T) {
 	}
 
 	// make sure the same challenge exists in the database
-	challenge, err := providers.db.SessionChallenge(user.ID)
+	challenge, err := api.db.SessionChallenge(user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,17 +196,17 @@ func TestCreateAuthChallengeHandler(t *testing.T) {
 }
 
 func TestFinishAuthChallengeHandler(t *testing.T) {
-	providers := createTestProviders(t)
+	api := testHTTPAPI(t)
 
-	user, keyPair := createTestUser(t, providers)
+	user, keyPair := createTestUser(t, api.db, api.kvs)
 
 	challenge := make([]byte, 255)
 	crand.Read(challenge)
 	creationDate := time.Now().Unix()
-	providers.db.InsertSessionChallenge(user.ID, creationDate, challenge)
+	api.db.InsertSessionChallenge(user.ID, creationDate, challenge)
 
-	challengeCT, challengeNonce, _ := sodium.PublicKeyEncrypt(challenge, providers.keyPair.Public, keyPair.Secret)
-	cdCT, cdNonce, _ := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), providers.keyPair.Public, keyPair.Secret)
+	challengeCT, challengeNonce, _ := sodium.PublicKeyEncrypt(challenge, api.keyPair.Public, keyPair.Secret)
+	cdCT, cdNonce, _ := sodium.PublicKeyEncrypt(int64ToBytes(creationDate), api.keyPair.Public, keyPair.Secret)
 
 	body := struct {
 		Challenge    encryptedData `json:"challenge"`
@@ -238,7 +231,7 @@ func TestFinishAuthChallengeHandler(t *testing.T) {
 		bytes.NewReader(data))
 	w := httptest.NewRecorder()
 
-	router := newOscarRouter(providers, httpAPI{})
+	router := newOscarRouter(api)
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
@@ -266,7 +259,7 @@ func TestFinishAuthChallengeHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	// decrypt the bytes
-	msg, success := sodium.SymmetricKeyDecrypt(encdToken[sodium.SymmetricNonceSize:], encdToken[:sodium.SymmetricNonceSize], providers.symKey)
+	msg, success := sodium.SymmetricKeyDecrypt(encdToken[sodium.SymmetricNonceSize:], encdToken[:sodium.SymmetricNonceSize], api.symKey)
 	if !success {
 		t.Fatal("failed to decrypt session token")
 	}
@@ -335,15 +328,14 @@ func TestSessionHandler(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write(data)
 	}
-	providers := createTestProviders(t)
-	user, keyPair := createTestUser(t, providers)
-	token := loginTestUser(t, providers, user, keyPair)
-	wrappedFn := sessionHandler(fn)
+
+	api := testHTTPAPI(t)
+	user, keyPair := createTestUser(t, api.db, api.kvs)
+	token := loginTestUser(t, api, user, keyPair)
+	wrappedFn := sessionHandler(api.db, fn)
 
 	r := httptest.NewRequest(http.MethodGet, "/1/test", nil)
 	r.Header.Set("X-Oscar-Access-Token", token)
-	ctx := context.WithValue(r.Context(), contextServerProvidersKey, providers)
-	r = r.WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	wrappedFn.ServeHTTP(w, r)

@@ -7,6 +7,7 @@ import (
 
 // Provider is the set of functionality required by oscar of a file storage system.
 type Provider interface {
+	DeleteFile(relPath string) error
 	ReadFile(relPath string, dst io.Writer) error
 	WriteFile(relPath string, src io.Reader) error
 }

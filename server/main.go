@@ -52,7 +52,7 @@ func main() {
 	}
 
 	dsn := fmt.Sprintf("file:%s", filepath.Join(config.SQLDBDirectory, "sqlite.db"))
-	rs, err := sqlite.New(dsn)
+	db, err := sqlite.New(dsn)
 	if err != nil {
 		log.Fatal().Err(err).Msg("opening sqlite db")
 	}
@@ -90,21 +90,8 @@ func main() {
 		log.Fatal().Err(err).Msg("creating firebase messaging client")
 	}
 
-	// playground()
-	providers := &serverProviders{
-		db:      rs,
-		emailer: emailer,
-		fs:      fs,
-		kvs:     kvs,
-		symKey:  config.SymmetricKey,
-		keyPair: sodium.KeyPair{
-			Public: config.AsymmetricKeys.Public,
-			Secret: config.AsymmetricKeys.Secret,
-		},
-	}
-
 	api := httpAPI{
-		db:      rs,
+		db:      *db,
 		emailer: emailer,
 		fcm:     fcm,
 		fs:      fs,
@@ -115,7 +102,7 @@ func main() {
 		kvs:    kvs,
 		symKey: config.SymmetricKey,
 	}
-	router := newOscarRouter(providers, api)
+	router := newOscarRouter(api)
 
 	hostAddress := fmt.Sprintf(":%d", *config.Port)
 	httpSrvr := http.Server{
@@ -155,54 +142,54 @@ func main() {
 	}
 }
 
-func newOscarRouter(p *serverProviders, api httpAPI) http.Handler {
+func newOscarRouter(api httpAPI) http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/server-info", serverInfoHandler).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/enable-debug", api.enableDebugLoggingHandler).Methods(http.MethodGet)
 	r.HandleFunc("/disable-debug", api.disableDebugLoggingHandler).Methods(http.MethodGet)
 	v1 := r.PathPrefix("/1").Subrouter()
 
-	v1.Handle("/users", sessionHandler(searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/users", sessionHandler(api.db, api.searchUsersHandler)).Methods(http.MethodGet, http.MethodOptions)
 	v1.HandleFunc("/users", api.createUser).Methods(http.MethodPost, http.MethodOptions)
-	// v1.HandleFunc("/users", api.deleteUser).Methods(http.MethodDelete, http.MethodOptions)
-	v1.Handle("/users/me/apns-tokens", sessionHandler(api.addAPNSToken)).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(api.deleteAPNSToken)).Methods(http.MethodDelete, http.MethodOptions)
-	v1.Handle("/users/me/fcm-tokens", sessionHandler(addFCMTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/users/me/fcm-tokens/{token}", sessionHandler(deleteFCMTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
-	v1.Handle("/users/me/backup", sessionHandler(retrieveBackupHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/users/me/backup", sessionHandler(saveBackupHandler)).Methods(http.MethodPut, http.MethodOptions)
-	v1.Handle("/users/{public_id}", sessionHandler(getUserInfoHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/users/{public_id}/messages", sessionHandler(api.sendMessageToUserHandler)).Methods(http.MethodPost, http.MethodOptions)
-	v1.HandleFunc("/users/{public_id}/public-key", getUserPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
+	v1.HandleFunc("/users/me", sessionHandler(api.db, api.deleteUser)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens", sessionHandler(api.db, api.addAPNSToken)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/apns-tokens/{token}", sessionHandler(api.db, api.deleteAPNSToken)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/fcm-tokens", sessionHandler(api.db, api.addFCMTokenHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/users/me/fcm-tokens/{token}", sessionHandler(api.db, api.deleteFCMTokenHandler)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/users/me/backup", sessionHandler(api.db, api.retrieveBackupHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/users/me/backup", sessionHandler(api.db, api.saveBackupHandler)).Methods(http.MethodPut, http.MethodOptions)
+	v1.Handle("/users/{public_id}", sessionHandler(api.db, api.getUserInfoHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/users/{public_id}/messages", sessionHandler(api.db, api.sendMessageToUserHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/users/{public_id}/public-key", api.getUserPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	v1.Handle("/messages", sessionHandler(getMessagesHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(getMessageHandler)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(deleteMessageHandler)).Methods(http.MethodDelete, http.MethodOptions)
+	v1.Handle("/messages", sessionHandler(api.db, api.getMessagesHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(api.db, api.getMessageHandler)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/messages/{message_id:[0-9]+}", sessionHandler(api.db, api.deleteMessageHandler)).Methods(http.MethodDelete, http.MethodOptions)
 
 	// this has to come first, so it has a chance to match before the box_id urls
 	v1.HandleFunc("/drop-boxes/watch", api.createPackageWatcher).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/drop-boxes/send", sessionHandler(api.sendMultiplePackages)).Methods(http.MethodPost, http.MethodOptions)
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.pickUpPackage)).Methods(http.MethodGet, http.MethodOptions)
-	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.dropPackage)).Methods(http.MethodPut, http.MethodOptions)
+	v1.Handle("/drop-boxes/send", sessionHandler(api.db, api.sendMultiplePackages)).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.db, api.pickUpPackage)).Methods(http.MethodGet, http.MethodOptions)
+	v1.Handle("/drop-boxes/{box_id}", sessionHandler(api.db, api.dropPackage)).Methods(http.MethodPut, http.MethodOptions)
 
-	v1.HandleFunc("/public-key", getServerPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
+	v1.HandleFunc("/public-key", api.getServerPublicKeyHandler).Methods(http.MethodGet, http.MethodOptions)
 
 	// We have to name the tickets endpoint with something that isn't a valid username, otherwise we would have just used /tickets
-	v1.Handle("/sessions/expiring-tickets", sessionHandler(createTicketHandler)).Methods(http.MethodPost, http.MethodOptions)
-	v1.HandleFunc("/sessions/{username}/challenge", createAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
-	v1.HandleFunc("/sessions/{username}/challenge-response", finishAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.Handle("/sessions/expiring-tickets", sessionHandler(api.db, api.createTicketHandler)).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/sessions/{username}/challenge", api.createAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/sessions/{username}/challenge-response", api.finishAuthChallengeHandler).Methods(http.MethodPost, http.MethodOptions)
 
-	v1.HandleFunc("/sockets", createSocketHandler).Methods(http.MethodGet, http.MethodOptions)
+	v1.HandleFunc("/sockets", api.createSocketHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	v1.HandleFunc("/email-verifications", verifyEmailHandler).Methods(http.MethodPost, http.MethodOptions)
-	v1.HandleFunc("/email-verifications/{token}", disavowEmailHandler).Methods(http.MethodDelete, http.MethodOptions)
+	v1.HandleFunc("/email-verifications", api.verifyEmailHandler).Methods(http.MethodPost, http.MethodOptions)
+	v1.HandleFunc("/email-verifications/{token}", api.disavowEmailHandler).Methods(http.MethodDelete, http.MethodOptions)
 
 	v1.HandleFunc("/goroutine-stacks", goroutineStacksHandler).Methods(http.MethodGet, http.MethodOptions)
 
 	r.NotFoundHandler = http.HandlerFunc(notFoundHandler)
 	r.MethodNotAllowedHandler = http.HandlerFunc(notFoundHandler)
 
-	r.Use(logMiddleware, corsMiddleware, p.Middleware)
+	r.Use(logMiddleware, corsMiddleware)
 
 	return r
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/encodable"
-	"zood.dev/oscar/model"
+	"zood.dev/oscar/sqlite"
 )
 
 type Message struct {
@@ -27,7 +27,7 @@ func (api httpAPI) sendMessageToUserHandler(w http.ResponseWriter, r *http.Reque
 	sessionUserID := userIDFromContext(r.Context())
 
 	// make sure this user exists
-	userID, ok := parseUserID(w, r)
+	userID, ok := api.parseUserID(w, r)
 	if !ok {
 		return
 	}
@@ -44,18 +44,16 @@ func (api httpAPI) sendMessageToUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	providers := providersCtx(r.Context())
 	if shouldLogDebug() {
 		log.Printf("send_message: %s => %s (urgent? %t, transient? %t)",
 			api.db.Username(sessionUserID), api.db.Username(userID),
 			body.Urgent, body.Transient)
 	}
 
-	kvs := providers.kvs
 	msg := Message{}
 	msg.CipherText = body.CipherText
 	msg.Nonce = body.Nonce
-	msg.PublicSenderID, err = kvs.PublicIDFromUserID(sessionUserID)
+	msg.PublicSenderID, err = api.kvs.PublicIDFromUserID(sessionUserID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -77,7 +75,7 @@ func (api httpAPI) sendMessageToUserHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // getMessageHandler handles GET /messages/{message_id}
-func getMessageHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) getMessageHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	vars := mux.Vars(r)
 	msgIDStr := vars["message_id"]
@@ -87,13 +85,11 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providers := providersCtx(r.Context())
-	db := providers.db
 	if shouldLogDebug() {
-		log.Debug().Str("username", db.Username(userID)).Int64("messageId", msgID).Msg("get_message")
+		log.Debug().Str("username", api.db.Username(userID)).Int64("messageId", msgID).Msg("get_message")
 	}
 
-	rec, err := db.MessageToRecipient(userID, msgID)
+	rec, err := api.db.MessageToRecipient(userID, msgID)
 	if err != nil {
 		sendInternalErr(w, err)
 	}
@@ -103,8 +99,7 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := providers.kvs
-	pubID, err := kvs.PublicIDFromUserID(rec.SenderID)
+	pubID, err := api.kvs.PublicIDFromUserID(rec.SenderID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -123,23 +118,20 @@ func getMessageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getMessagesHandler handles GET /messages
-func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	providers := providersCtx(r.Context())
-	db := providers.db
 	if shouldLogDebug() {
-		log.Printf("get_messages: %s", db.Username(userID))
+		log.Printf("get_messages: %s", api.db.Username(userID))
 	}
 
-	records, err := db.MessageRecords(userID)
+	records, err := api.db.MessageRecords(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
-	kvs := providers.kvs
 	msgs := make([]Message, 0)
 	for _, r := range records {
-		pubID, err := kvs.PublicIDFromUserID(r.SenderID)
+		pubID, err := api.kvs.PublicIDFromUserID(r.SenderID)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -160,7 +152,7 @@ func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // handles DELETE /messages/{message_id}
-func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	vars := mux.Vars(r)
 	msgIDStr := vars["message_id"]
@@ -170,13 +162,12 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := providersCtx(r.Context()).db
 	if shouldLogDebug() {
-		log.Printf("delete_message: %s %d", db.Username(userID), msgID)
+		log.Printf("delete_message: %s %d", api.db.Username(userID), msgID)
 	}
 
 	// only delete the message if the calling user is also the recipient
-	err = db.DeleteMessageToRecipient(userID, msgID)
+	err = api.db.DeleteMessageToRecipient(userID, msgID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -185,7 +176,7 @@ func deleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func pushMessageToUser(db model.Provider, fbClient *messaging.Client, msg Message, userID int64, urgent bool) {
+func pushMessageToUser(db sqlite.DB, fbClient *messaging.Client, msg Message, userID int64, urgent bool) {
 	msgMap := map[string]string{
 		"id":          strconv.FormatInt(msg.ID, 10),
 		"cipher_text": msg.CipherText.Base64(),

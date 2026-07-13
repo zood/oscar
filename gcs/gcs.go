@@ -3,6 +3,7 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"cloud.google.com/go/storage"
@@ -39,12 +40,23 @@ func New(credsPath, bucketName string) (filestor.Provider, error) {
 	}, nil
 }
 
+func (gp gcsProvider) DeleteFile(relPath string) error {
+	if err := gp.bucket.Object(relPath).Delete(context.Background()); err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return fmt.Errorf("%s: %w", relPath, filestor.ErrFileNotExist)
+		}
+		return err
+	}
+
+	return nil
+}
+
 func (gp gcsProvider) ReadFile(relPath string, dst io.Writer) error {
 	obj := gp.bucket.Object(relPath)
 	rdr, err := obj.NewReader(context.Background())
 	if err != nil {
-		if err == storage.ErrObjectNotExist {
-			return filestor.ErrFileNotExist
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return fmt.Errorf("%s: %w", relPath, filestor.ErrFileNotExist)
 		}
 		return err
 	}

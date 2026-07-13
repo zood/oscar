@@ -57,7 +57,7 @@ func TestReadNonExistentObject(t *testing.T) {
 
 	dst := &bytes.Buffer{}
 	err := p.ReadFile(fp, dst)
-	require.Equal(t, filestor.ErrFileNotExist, err)
+	require.ErrorIs(t, err, filestor.ErrFileNotExist)
 }
 
 func TestWriteNewFile(t *testing.T) {

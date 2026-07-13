@@ -14,8 +14,8 @@ import (
 	"github.com/gorilla/mux"
 	"zood.dev/oscar/base62"
 	"zood.dev/oscar/encodable"
-	"zood.dev/oscar/model"
 	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 )
 
 type encryptedData struct {
@@ -38,14 +38,13 @@ type loginResponse struct {
 
 const ticketLength = 16
 
-func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	username := vars["username"]
 	username = strings.ToLower(username)
 
 	// find the user
-	db := providersCtx(r.Context()).db
-	userRec, err := db.User(username)
+	userRec, err := api.db.User(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -70,7 +69,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	crand.Read(challenge)
 
 	// delete any existing challenge for this user
-	err = db.DeleteSessionChallengeUser(userRec.ID)
+	err = api.db.DeleteSessionChallengeUser(userRec.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -78,7 +77,7 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 	creationDate := time.Now().Unix()
 
-	err = db.InsertSessionChallenge(userRec.ID, creationDate, challenge)
+	err = api.db.InsertSessionChallenge(userRec.ID, creationDate, challenge)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -93,11 +92,10 @@ func createAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, resp)
 }
 
-func createTicketHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) createTicketHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 	ticket := base62.Rand(ticketLength)
-	db := providersCtx(r.Context()).db
-	err := db.InsertTicket(ticket, userID)
+	err := api.db.InsertTicket(ticket, userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -108,7 +106,7 @@ func createTicketHandler(w http.ResponseWriter, r *http.Request) {
 	}{Ticket: ticket})
 }
 
-func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	authResponse := struct {
 		Challenge    encryptedData `json:"challenge"`
 		CreationDate encryptedData `json:"creation_date"`
@@ -123,9 +121,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	username := vars["username"]
 	username = strings.ToLower(username)
 
-	providers := providersCtx(r.Context())
-	db := providers.db
-	user, err := db.User(username)
+	user, err := api.db.User(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -136,7 +132,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// find the challenge for this user
-	challenge, err := db.SessionChallenge(user.ID)
+	challenge, err := api.db.SessionChallenge(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -149,11 +145,11 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	// if the challenge was created more than 2 minutes ago, then consider it expired
 	if (time.Now().Unix() - challenge.CreationDate) > 120 {
 		sendBadReqCode(w, "challenge expired", errorChallengeExpired)
-		go db.DeleteSessionChallengeID(challenge.ID)
+		go api.db.DeleteSessionChallengeID(challenge.ID)
 		return
 	}
 
-	decryptedChallenge, ok := sodium.PublicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, user.PublicKey, providers.keyPair.Secret)
+	decryptedChallenge, ok := sodium.PublicKeyDecrypt(authResponse.Challenge.CipherText, authResponse.Challenge.Nonce, user.PublicKey, api.keyPair.Secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -169,7 +165,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decryptedCreationDate, ok := sodium.PublicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, user.PublicKey, providers.keyPair.Secret)
+	decryptedCreationDate, ok := sodium.PublicKeyDecrypt(authResponse.CreationDate.CipherText, authResponse.CreationDate.Nonce, user.PublicKey, api.keyPair.Secret)
 	if !ok {
 		sendErr(w, "login failed", http.StatusUnauthorized, errorLoginFailed)
 		return
@@ -194,7 +190,7 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenCT, tokenNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, providers.symKey)
+	tokenCT, tokenNonce, err := sodium.SymmetricKeyEncrypt(tokenBytes, api.symKey)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -203,14 +199,13 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := append(tokenNonce, tokenCT...)
 	accessTokenB64 := base64.StdEncoding.EncodeToString(accessToken)
 	oneYearFromNow := time.Now().Add(365 * 24 * time.Hour)
-	err = db.InsertAccessToken(accessTokenB64, user.ID, oneYearFromNow.Unix())
+	err = api.db.InsertAccessToken(accessTokenB64, user.ID, oneYearFromNow.Unix())
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 
-	kvs := providersCtx(r.Context()).kvs
-	pubID, err := kvs.PublicIDFromUserID(user.ID)
+	pubID, err := api.kvs.PublicIDFromUserID(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -220,20 +215,20 @@ func finishAuthChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		ID:                       pubID,
 		AccessToken:              accessTokenB64,
 		WrappedSymmetricKey:      user.WrappedSymmetricKey,
-		WrappedSymmetricKeyNonce: user.WrappedSymmetricKeyNonce})
+		WrappedSymmetricKeyNonce: user.WrappedSymmetricKeyNonce,
+	})
 
-	go db.DeleteSessionChallengeID(challenge.ID)
+	go api.db.DeleteSessionChallengeID(challenge.ID)
 }
 
 func sendInvalidAccessToken(w http.ResponseWriter) {
 	sendErr(w, "invalid/missing access token", http.StatusUnauthorized, errorInvalidAccessToken)
 }
 
-func sessionHandler(next http.HandlerFunc) http.HandlerFunc {
+func sessionHandler(db sqlite.DB, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Oscar-Access-Token")
-		providers := providersCtx(r.Context())
-		userID, err := verifyAccessToken(providers.db, token)
+		userID, err := verifyAccessToken(db, token)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -253,7 +248,7 @@ func userIDFromContext(ctx context.Context) int64 {
 	return ctx.Value(contextUserIDKey).(int64)
 }
 
-func verifyAccessToken(db model.Provider, token string) (int64, error) {
+func verifyAccessToken(db sqlite.DB, token string) (int64, error) {
 	if token == "" {
 		return 0, nil
 	}
@@ -274,7 +269,7 @@ func verifyAccessToken(db model.Provider, token string) (int64, error) {
 	return atr.UserID, nil
 }
 
-func verifySessionTicket(db model.Provider, ticket string) (int64, error) {
+func verifySessionTicket(db sqlite.DB, ticket string) (int64, error) {
 	userID, timestamp, err := db.Ticket(ticket)
 	if err != nil {
 		return 0, fmt.Errorf("failed to query for ticket: %w", err)

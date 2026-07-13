@@ -40,7 +40,7 @@ func sendVerificationEmail(token, email string, emailer smtp.SendEmailer) error 
 }
 
 // verifyEmailHandler handles POST /email-verifications
-func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	body := struct {
 		Token string `json:"token"`
 	}{}
@@ -55,8 +55,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := providersCtx(r.Context()).db
-	evtr, err := db.EmailVerificationTokenRecord(body.Token)
+	evtr, err := api.db.EmailVerificationTokenRecord(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -67,7 +66,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add the email to the user, then delete the verification
-	err = db.VerifyEmail(evtr.Email, evtr.UserID)
+	err = api.db.VerifyEmail(evtr.Email, evtr.UserID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -77,7 +76,7 @@ func verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // disavowEmailHandler handles DELETE /email-verifications
-func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	token := vars["token"]
 	if token == "" {
@@ -85,8 +84,7 @@ func disavowEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := providersCtx(r.Context()).db
-	err := db.DisavowEmail(token)
+	err := api.db.DisavowEmail(token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

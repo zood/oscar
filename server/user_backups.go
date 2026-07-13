@@ -2,31 +2,30 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
-	"path/filepath"
+	"path"
 	"strconv"
 
 	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/filestor"
 )
 
-// const userDBsBucketName = "db_backups"
-const dbBackupsDir = "db_backups"
+func userBackupFilePath(userID int64) string {
+	const dbBackupsDir = "db_backups"
+	return path.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
+}
 
-func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	providers := providersCtx(r.Context())
-	db := providers.db
 	if shouldLogDebug() {
-		log.Debug().Str("username", db.Username(userID)).Msg("download_backup")
+		log.Debug().Str("username", api.db.Username(userID)).Msg("download_backup")
 	}
 
-	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
-	fs := providers.fs
-	err := fs.ReadFile(relPath, w)
+	err := api.fs.ReadFile(userBackupFilePath(userID), w)
 	if err != nil {
-		if err == filestor.ErrFileNotExist {
+		if errors.Is(err, filestor.ErrFileNotExist) {
 			sendNotFound(w, "no backup found", errorBackupNotFound)
 			return
 		}
@@ -36,12 +35,10 @@ func retrieveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
-	providers := providersCtx(r.Context())
-	db := providers.db
 	if shouldLogDebug() {
-		log.Debug().Str("username", db.Username(userID)).Msg("backup")
+		log.Debug().Str("username", api.db.Username(userID)).Msg("backup")
 	}
 
 	buf, err := io.ReadAll(r.Body)
@@ -50,10 +47,8 @@ func saveBackupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relPath := filepath.Join(dbBackupsDir, strconv.FormatInt(userID, 10)+".db")
 	rdr := bytes.NewReader(buf)
-	fs := providers.fs
-	err = fs.WriteFile(relPath, rdr)
+	err = api.fs.WriteFile(userBackupFilePath(userID), rdr)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

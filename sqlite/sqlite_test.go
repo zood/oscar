@@ -9,12 +9,12 @@ import (
 	"zood.dev/oscar/model"
 )
 
-func newDB(t *testing.T) sqliteDB {
+func newDB(t *testing.T) *DB {
 	t.Helper()
 
 	db, err := New(InMemoryDSN)
 	require.NoError(t, err)
-	return db.(sqliteDB)
+	return db
 }
 
 func TestAccessTokens(t *testing.T) {
@@ -57,7 +57,7 @@ func TestEmailVerification(t *testing.T) {
 		PublicKey:                   []byte("public-key"),
 		WrappedSecretKey:            []byte("wrapped-secret-key"),
 		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
-		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-key"),
 		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
 		Username:                    "bob",
 	}
@@ -102,6 +102,34 @@ func TestEmailVerification(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, actual)
 	require.Equal(t, user, *actual)
+}
+
+func TestDeleteUser(t *testing.T) {
+	db := newDB(t)
+
+	user := model.UserRecord{
+		Email:                       new("fizzbuzz@zood.xyz"),
+		PasswordHashAlgorithm:       "argon2id13",
+		PasswordHashMemoryLimit:     32768,
+		PasswordHashOperationsLimit: 6,
+		PasswordSalt:                []byte("password-salt"),
+		PublicKey:                   []byte("public-key"),
+		WrappedSecretKey:            []byte("wrapped-secret-key"),
+		WrappedSecretKeyNonce:       []byte("wrapped-secret-key-nonce"),
+		WrappedSymmetricKey:         []byte("wrapped-symmetric-ket"),
+		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
+		Username:                    "bob",
+	}
+	verificationToken := "verification-token"
+	userID, err := db.InsertUser(user, &verificationToken)
+	require.NoError(t, err)
+
+	err = db.DeleteUser(t.Context(), userID)
+	require.NoError(t, err)
+
+	actualUser, err := db.User(user.Username)
+	require.NoError(t, err)
+	require.Nil(t, actualUser)
 }
 
 func TestDisavowEmail(t *testing.T) {

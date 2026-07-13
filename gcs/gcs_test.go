@@ -2,6 +2,7 @@ package gcs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ func TestReadNonExistentObject(t *testing.T) {
 
 	dst := &bytes.Buffer{}
 	err := p.ReadFile(fp, dst)
-	if err != filestor.ErrFileNotExist {
+	if !errors.Is(err, filestor.ErrFileNotExist) {
 		t.Fatalf("Should have received 'file not exist'. Got %v", err)
 	}
 }

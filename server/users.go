@@ -4,17 +4,21 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"zood.dev/oscar/base62"
+	"zood.dev/oscar/email"
 	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
 	"zood.dev/oscar/model"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -40,7 +44,7 @@ type User struct {
 	Email                       string          `json:"email" db:"email"`
 }
 
-func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+func (api httpAPI) parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	vars := mux.Vars(r)
 
 	pubIDStr := vars["public_id"]
@@ -50,8 +54,7 @@ func parseUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 
-	kvs := providersCtx(r.Context()).kvs
-	id, err := kvs.UserIDFromPublicID(pubID)
+	id, err := api.kvs.UserIDFromPublicID(pubID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return 0, false
@@ -87,7 +90,7 @@ func (api httpAPI) createUser(w http.ResponseWriter, r *http.Request) {
 	}{ID: pubID})
 }
 
-func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer, user User) ([]byte, *serverError) {
+func createUser(db sqlite.DB, kvs kvstor.Provider, emailer smtp.SendEmailer, user User) ([]byte, *serverError) {
 	user.Username = strings.ToLower(strings.TrimSpace(user.Username))
 	if user.Username == "" {
 		return nil, &serverError{code: errorInvalidUsername, message: "Username can not be empty"}
@@ -137,24 +140,10 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	}
 	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
 	var emailVerificationToken *string
+	// an email address is optional, so only validate the value if it's non-empty
 	if user.Email != "" {
-		if len(user.Email) > 254 {
-			return nil, &serverError{code: errorInvalidEmail, message: "Email address is too long"}
-		}
-		parts := strings.Split(user.Email, "@")
-		if len(parts) != 2 {
-			return nil, &serverError{code: errorInvalidEmail, message: "Email address doesn't have a user and domain separated by an '@'"}
-		}
-		if parts[0] == "" {
-			return nil, &serverError{code: errorInvalidEmail, message: "Invalid local component in email"}
-		}
-		domainParts := strings.Split(parts[1], ".")
-		if len(domainParts) < 2 {
-			return nil, &serverError{code: errorInvalidEmail, message: "Invalid domain in email address"}
-		}
-		tld := domainParts[len(domainParts)-1]
-		if len(tld) < 2 {
-			return nil, &serverError{code: errorInvalidEmail, message: "Invalid tld in domain"}
+		if err := email.IsValid(user.Email); err != nil {
+			return nil, &serverError{code: errorInvalidEmail, message: err.Error()}
 		}
 
 		// everything looks good, so let's generate a verification token
@@ -229,16 +218,37 @@ func createUser(db model.Provider, kvs kvstor.Provider, emailer smtp.SendEmailer
 	return pubID, nil
 }
 
+func (api httpAPI) deleteUser(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r.Context())
+	if err := api.db.DeleteUser(r.Context(), userID); err != nil {
+		if errors.Is(err, r.Context().Err()) {
+			sendResponse(w, map[string]any{}, http.StatusRequestTimeout)
+		} else {
+			sendInternalErr(w, err)
+		}
+		return
+	}
+
+	if err := api.fs.DeleteFile(userBackupFilePath(userID)); err != nil {
+		if errors.Is(err, filestor.ErrFileNotExist) {
+			log.Debug().Err(err).Msg("No user backup file found to delete")
+		} else {
+			log.Err(err).Msg("Problem deleting user backup file")
+		}
+	}
+
+	sendSuccess(w, map[string]any{})
+}
+
 // getUserPublicKeyHandler handles GET /users/{public_id}/public-key
-func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseUserID(w, r)
+func (api httpAPI) getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.parseUserID(w, r)
 	if !ok {
 		sendNotFound(w, "user not found", errorUserNotFound)
 		return
 	}
 
-	db := providersCtx(r.Context()).db
-	pubKey, err := db.UserPublicKey(userID)
+	pubKey, err := api.db.UserPublicKey(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -252,16 +262,14 @@ func getUserPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // searchUsersHandler handles GET /users
-func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.URL.Query().Get("username")
 	username = strings.TrimSpace(username)
 	username = strings.ToLower(username)
 
 	user := User{}
 	var err error
-	providers := providersCtx(r.Context())
-	db := providers.db
-	user.ID, user.PublicKey, err = db.LimitedUserInfo(username)
+	user.ID, user.PublicKey, err = api.db.LimitedUserInfo(username)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -272,8 +280,7 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Username = username
-	kvs := providers.kvs
-	user.PublicID, err = kvs.PublicIDFromUserID(user.ID)
+	user.PublicID, err = api.kvs.PublicIDFromUserID(user.ID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -281,14 +288,13 @@ func searchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, user)
 }
 
-func getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseUserID(w, r)
+func (api httpAPI) getUserInfoHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.parseUserID(w, r)
 	if !ok {
 		return
 	}
 
-	db := providersCtx(r.Context()).db
-	username, pubKey, err := db.LimitedUserInfoID(userID)
+	username, pubKey, err := api.db.LimitedUserInfoID(userID)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

@@ -4,13 +4,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"zood.dev/oscar/model"
 )
 
-func NewMockDB(t *testing.T) model.Provider {
+func NewMockDB(t *testing.T) DB {
 	t.Helper()
 
 	db, err := New(InMemoryDSN)
 	require.NoError(t, err)
-	return db
+	return *db
 }

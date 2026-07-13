@@ -12,8 +12,8 @@ import (
 )
 
 func TestVerifyEmailHandler(t *testing.T) {
-	prvdrs := createTestProviders(t)
-	handler := newOscarRouter(prvdrs, httpAPI{})
+	api := testHTTPAPI(t)
+	handler := newOscarRouter(api)
 	endpoint := "/1/email-verifications"
 
 	assertIsJSON := func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -67,7 +67,7 @@ func TestVerifyEmailHandler(t *testing.T) {
 	t.Run("successful", func(t *testing.T) {
 		token := "some-token"
 		email := "example@example.com"
-		_, err := prvdrs.db.InsertUser(model.UserRecord{
+		_, err := api.db.InsertUser(model.UserRecord{
 			Username:                 "jim",
 			PublicKey:                []byte("public-key"),
 			WrappedSecretKey:         []byte("wrapped-secret-key"),

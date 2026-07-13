@@ -6,8 +6,8 @@ import (
 	"zood.dev/oscar/encodable"
 )
 
-func getServerPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
-	pubKey := providersCtx(r.Context()).keyPair.Public
+func (api httpAPI) getServerPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
+	pubKey := api.keyPair.Public
 	sendSuccess(w, struct {
 		Key encodable.Bytes `json:"public_key"`
 	}{Key: pubKey})

@@ -12,9 +12,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"zood.dev/oscar/filestor"
 	"zood.dev/oscar/kvstor"
-	"zood.dev/oscar/model"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
+	"zood.dev/oscar/sqlite"
 )
 
 var tlsHandshakeError = []byte("http: TLS handshake error")
@@ -40,7 +40,7 @@ func (tef tlsErrorFilter) Write(p []byte) (n int, err error) {
 }
 
 type httpAPI struct {
-	db      model.Provider
+	db      sqlite.DB
 	emailer smtp.SendEmailer
 	fcm     *messaging.Client
 	fs      filestor.Provider

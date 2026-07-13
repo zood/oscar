@@ -1,12 +1,13 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/Masterminds/squirrel"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // because, duh
 	"github.com/pkg/errors"
@@ -18,23 +19,28 @@ import (
 const InMemoryDSN = ":memory:"
 
 const (
-	tableTickets = "tickets"
+	tableEmailVerificationTokens = "email_verification_tokens"
+	tableMessages                = "messages"
+	tableSessionChallenges       = "session_challenges"
+	tableSessions                = "sessions"
+	tableTickets                 = "tickets"
+	tableUserAPNSTokens          = "user_apns_tokens"
+	tableUserFCMTokens           = "user_fcm_tokens"
+	tableUsers                   = "users"
 )
 
-// sqliteDB fulfills the model.Provider interface
-type sqliteDB struct {
+type DB struct {
 	dbx *sqlx.DB
 }
 
-// New returns a model.Provider backed by sqlite
-func New(dsn string) (model.Provider, error) {
+func New(dsn string) (*DB, error) {
 	dbx, err := sqlx.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
 	dbx.SetMaxOpenConns(1)
 
-	db := sqliteDB{dbx: dbx}
+	db := DB{dbx: dbx}
 	// check db version
 	ver := db.schemaVersion()
 	tx, err := db.dbx.Beginx()
@@ -76,10 +82,10 @@ func New(dsn string) (model.Provider, error) {
 		return nil, errors.Wrap(err, "error committing migration transaction")
 	}
 
-	return db, nil
+	return &db, nil
 }
 
-func (db sqliteDB) AccessToken(token string) (*model.AccessTokenRecord, error) {
+func (db DB) AccessToken(token string) (*model.AccessTokenRecord, error) {
 	const query = `SELECT user_id, expires_at FROM sessions WHERE token=?`
 	atr := model.AccessTokenRecord{Token: token}
 	err := db.dbx.QueryRowx(query, token).StructScan(&atr)
@@ -93,7 +99,7 @@ func (db sqliteDB) AccessToken(token string) (*model.AccessTokenRecord, error) {
 	}
 }
 
-func (db sqliteDB) APNSToken(token string) (*model.APNSTokenRecord, error) {
+func (db DB) APNSToken(token string) (*model.APNSTokenRecord, error) {
 	const query = `SELECT id, user_id FROM user_apns_tokens WHERE token=?`
 	ftr := model.APNSTokenRecord{Token: token}
 	err := db.dbx.QueryRowx(query, token).StructScan(&ftr)
@@ -107,7 +113,7 @@ func (db sqliteDB) APNSToken(token string) (*model.APNSTokenRecord, error) {
 	}
 }
 
-func (db sqliteDB) APNSTokensRaw(userID int64) ([]string, error) {
+func (db DB) APNSTokensRaw(userID int64) ([]string, error) {
 	const query = `SELECT token FROM user_apns_tokens WHERE user_id=?`
 	tokens := make([]string, 0)
 	err := db.dbx.Select(&tokens, query, userID)
@@ -117,7 +123,7 @@ func (db sqliteDB) APNSTokensRaw(userID int64) ([]string, error) {
 	return tokens, nil
 }
 
-func (db sqliteDB) APNSTokenUser(userID int64, token string) (*model.APNSTokenRecord, error) {
+func (db DB) APNSTokenUser(userID int64, token string) (*model.APNSTokenRecord, error) {
 	const query = "SELECT id FROM user_apns_tokens WHERE user_id=? AND token=?"
 	var id int64
 	err := db.dbx.QueryRow(query, userID, token).Scan(&id)
@@ -131,35 +137,35 @@ func (db sqliteDB) APNSTokenUser(userID int64, token string) (*model.APNSTokenRe
 	}
 }
 
-func (db sqliteDB) Database() *sql.DB {
+func (db DB) Database() *sql.DB {
 	return db.dbx.DB
 }
 
-func (db sqliteDB) DeleteAPNSToken(token string) error {
+func (db DB) DeleteAPNSToken(token string) error {
 	const query = `DELETE FROM user_apns_tokens WHERE token=?`
 	_, err := db.dbx.Exec(query, token)
 	return err
 }
 
-func (db sqliteDB) DeleteAPNSTokenOfUser(userID int64, token string) error {
+func (db DB) DeleteAPNSTokenOfUser(userID int64, token string) error {
 	const query = `DELETE FROM user_apns_tokens WHERE user_id=? AND token=?`
 	_, err := db.dbx.Exec(query, userID, token)
 	return err
 }
 
-func (db sqliteDB) DeleteFCMToken(token string) error {
+func (db DB) DeleteFCMToken(token string) error {
 	const query = `DELETE FROM user_fcm_tokens WHERE token=?`
 	_, err := db.dbx.Exec(query, token)
 	return err
 }
 
-func (db sqliteDB) DeleteFCMTokenOfUser(userID int64, token string) error {
+func (db DB) DeleteFCMTokenOfUser(userID int64, token string) error {
 	const query = `DELETE FROM user_fcm_tokens WHERE user_id=? AND token=?`
 	_, err := db.dbx.Exec(query, userID, token)
 	return err
 }
 
-func (db sqliteDB) DeleteMessageToRecipient(recipientID, msgID int64) error {
+func (db DB) DeleteMessageToRecipient(recipientID, msgID int64) error {
 	deleteSQL := `DELETE FROM messages WHERE recipient_id=? AND id=?`
 	_, err := db.dbx.Exec(deleteSQL, recipientID, msgID)
 	if err != nil {
@@ -169,24 +175,56 @@ func (db sqliteDB) DeleteMessageToRecipient(recipientID, msgID int64) error {
 	return nil
 }
 
-func (db sqliteDB) DeleteSessionChallengeID(id int64) error {
+func (db DB) DeleteSessionChallengeID(id int64) error {
 	_, err := db.dbx.Exec("DELETE FROM session_challenges WHERE id=?", id)
 	return err
 }
 
-func (db sqliteDB) DeleteSessionChallengeUser(userID int64) error {
+func (db DB) DeleteSessionChallengeUser(userID int64) error {
 	_, err := db.dbx.Exec("DELETE FROM session_challenges WHERE user_id=?", userID)
 	return err
 }
 
-func (db sqliteDB) DeleteTickets(olderThan int64) error {
-	_, err := squirrel.Delete(tableTickets).
-		Where(squirrel.LtOrEq{"timestamp": olderThan}).
+func (db DB) DeleteTickets(olderThan int64) error {
+	_, err := sq.Delete(tableTickets).
+		Where(sq.LtOrEq{"timestamp": olderThan}).
 		RunWith(db.dbx.DB).Exec()
 	return err
 }
 
-func (db sqliteDB) DisavowEmail(token string) error {
+func (db DB) DeleteUser(ctx context.Context, userID int64) error {
+	tx, err := db.dbx.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	query, args := sq.Delete(tableUsers).Where(sq.Eq{"id": userID}).MustSql()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("deleting user record: %w", err)
+	}
+	query, args = sq.Delete(tableMessages).Where(sq.Eq{"recipient_id": userID}).MustSql()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("deleting user messages: %w", err)
+	}
+
+	// these other tables can be cleaned just by filtering on the user_id
+	easyTables := []string{
+		tableEmailVerificationTokens, tableSessionChallenges,
+		tableUserAPNSTokens, tableUserFCMTokens,
+		tableTickets, tableSessions,
+	}
+	for _, table := range easyTables {
+		query, args := sq.Delete(table).Where(sq.Eq{"user_id": userID}).MustSql()
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("deleting user data from table %s: %w", table, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (db DB) DisavowEmail(token string) error {
 	const query = `DELETE FROM email_verification_tokens WHERE token=?`
 	_, err := db.dbx.Exec(query, token)
 	if err != nil {
@@ -196,7 +234,7 @@ func (db sqliteDB) DisavowEmail(token string) error {
 	return nil
 }
 
-func (db sqliteDB) EmailVerificationTokenRecord(token string) (*model.EmailVerificationTokenRecord, error) {
+func (db DB) EmailVerificationTokenRecord(token string) (*model.EmailVerificationTokenRecord, error) {
 	const query = `SELECT user_id, email, send_date FROM email_verification_tokens WHERE token=?`
 	evtr := model.EmailVerificationTokenRecord{}
 	err := db.dbx.QueryRow(query, token).Scan(&evtr.UserID, &evtr.Email, &evtr.SendDate)
@@ -213,7 +251,7 @@ func (db sqliteDB) EmailVerificationTokenRecord(token string) (*model.EmailVerif
 	return &evtr, nil
 }
 
-func (db sqliteDB) FCMToken(token string) (*model.FCMTokenRecord, error) {
+func (db DB) FCMToken(token string) (*model.FCMTokenRecord, error) {
 	const query = `SELECT id, user_id FROM user_fcm_tokens WHERE token=?`
 	ftr := model.FCMTokenRecord{Token: token}
 	err := db.dbx.QueryRowx(query, token).StructScan(&ftr)
@@ -227,7 +265,7 @@ func (db sqliteDB) FCMToken(token string) (*model.FCMTokenRecord, error) {
 	}
 }
 
-func (db sqliteDB) FCMTokensRaw(userID int64) ([]string, error) {
+func (db DB) FCMTokensRaw(userID int64) ([]string, error) {
 	const query = `SELECT token FROM user_fcm_tokens WHERE user_id=?`
 	tokens := make([]string, 0)
 	err := db.dbx.Select(&tokens, query, userID)
@@ -237,7 +275,7 @@ func (db sqliteDB) FCMTokensRaw(userID int64) ([]string, error) {
 	return tokens, nil
 }
 
-func (db sqliteDB) FCMTokenUser(userID int64, token string) (*model.FCMTokenRecord, error) {
+func (db DB) FCMTokenUser(userID int64, token string) (*model.FCMTokenRecord, error) {
 	const query = "SELECT id FROM user_fcm_tokens WHERE user_id=? AND token=?"
 	var id int64
 	err := db.dbx.QueryRow(query, userID, token).Scan(&id)
@@ -251,8 +289,8 @@ func (db sqliteDB) FCMTokenUser(userID int64, token string) (*model.FCMTokenReco
 	}
 }
 
-func (db sqliteDB) InsertAccessToken(token string, userID int64, expiresAt int64) error {
-	_, err := squirrel.Insert("sessions").SetMap(map[string]interface{}{
+func (db DB) InsertAccessToken(token string, userID int64, expiresAt int64) error {
+	_, err := sq.Insert("sessions").SetMap(map[string]interface{}{
 		"token":      token,
 		"user_id":    userID,
 		"expires_at": expiresAt,
@@ -260,19 +298,19 @@ func (db sqliteDB) InsertAccessToken(token string, userID int64, expiresAt int64
 	return err
 }
 
-func (db sqliteDB) InsertAPNSToken(userID int64, token string) error {
+func (db DB) InsertAPNSToken(userID int64, token string) error {
 	const query = `INSERT INTO user_apns_tokens (user_id, token) VALUES (?, ?)`
 	_, err := db.dbx.Exec(query, userID, token)
 	return err
 }
 
-func (db sqliteDB) InsertFCMToken(userID int64, token string) error {
+func (db DB) InsertFCMToken(userID int64, token string) error {
 	const query = `INSERT INTO user_fcm_tokens (user_id, token) VALUES (?, ?)`
 	_, err := db.dbx.Exec(query, userID, token)
 	return err
 }
 
-func (db sqliteDB) InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error) {
+func (db DB) InsertMessage(recipientID, senderID int64, cipherText, nonce []byte, sentDate int64) (int64, error) {
 	insertSQL := `
 	INSERT INTO messages (recipient_id, sender_id, cipher_text, nonce, sent_date) VALUES (?, ?, ?, ?, ?)`
 	result, err := db.dbx.Exec(insertSQL, recipientID, senderID, cipherText, nonce, sentDate)
@@ -287,7 +325,7 @@ func (db sqliteDB) InsertMessage(recipientID, senderID int64, cipherText, nonce 
 	return msgID, nil
 }
 
-func (db sqliteDB) InsertSessionChallenge(userID int64, creationDate int64, challenge []byte) error {
+func (db DB) InsertSessionChallenge(userID int64, creationDate int64, challenge []byte) error {
 	insertSQL := `
 	INSERT INTO session_challenges (user_id, creation_date, challenge) VALUES (?, ?, ?)`
 	_, err := db.dbx.Exec(insertSQL, userID, creationDate, challenge)
@@ -298,15 +336,15 @@ func (db sqliteDB) InsertSessionChallenge(userID int64, creationDate int64, chal
 	return nil
 }
 
-func (db sqliteDB) InsertTicket(ticket string, userID int64) error {
-	_, err := squirrel.Insert(tableTickets).
+func (db DB) InsertTicket(ticket string, userID int64) error {
+	_, err := sq.Insert(tableTickets).
 		Columns("ticket", "user_id").
 		Values(ticket, userID).
 		RunWith(db.dbx.DB).Exec()
 	return err
 }
 
-func (db sqliteDB) InsertUser(user model.UserRecord, verificationToken *string) (int64, error) {
+func (db DB) InsertUser(user model.UserRecord, verificationToken *string) (int64, error) {
 	// we don't insert the email, because it only gets inserted upon verification
 	insertSQL := `
 	INSERT INTO users (	username,
@@ -365,7 +403,7 @@ func (db sqliteDB) InsertUser(user model.UserRecord, verificationToken *string) 
 	return userID, nil
 }
 
-func (db sqliteDB) LimitedUserInfo(username string) (id int64, pubKey []byte, err error) {
+func (db DB) LimitedUserInfo(username string) (id int64, pubKey []byte, err error) {
 	err = db.dbx.QueryRow("SELECT id, public_key FROM users WHERE username=?", username).Scan(&id, &pubKey)
 	switch err {
 	case nil:
@@ -377,7 +415,7 @@ func (db sqliteDB) LimitedUserInfo(username string) (id int64, pubKey []byte, er
 	}
 }
 
-func (db sqliteDB) LimitedUserInfoID(userID int64) (username string, pubKey []byte, err error) {
+func (db DB) LimitedUserInfoID(userID int64) (username string, pubKey []byte, err error) {
 	err = db.dbx.QueryRow("SELECT username, public_key FROM users WHERE id=?", userID).Scan(&username, &pubKey)
 	switch err {
 	case nil:
@@ -389,7 +427,7 @@ func (db sqliteDB) LimitedUserInfoID(userID int64) (username string, pubKey []by
 	}
 }
 
-func (db sqliteDB) MessageRecords(recipientID int64) ([]model.MessageRecord, error) {
+func (db DB) MessageRecords(recipientID int64) ([]model.MessageRecord, error) {
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=?`
 	rows, err := db.dbx.Queryx(selectSQL, recipientID)
@@ -411,7 +449,7 @@ func (db sqliteDB) MessageRecords(recipientID int64) ([]model.MessageRecord, err
 	return msgs, nil
 }
 
-func (db sqliteDB) schemaVersion() int {
+func (db DB) schemaVersion() int {
 	var v int
 	err := db.dbx.QueryRow("PRAGMA user_version;").Scan(&v)
 	if err != nil {
@@ -421,13 +459,13 @@ func (db sqliteDB) schemaVersion() int {
 	return v
 }
 
-func (db sqliteDB) setSchemaVersion(tx *sqlx.Tx, version int) error {
+func (db DB) setSchemaVersion(tx *sqlx.Tx, version int) error {
 	query := fmt.Sprintf("PRAGMA user_version = %d", version)
 	_, err := tx.Exec(query)
 	return err
 }
 
-func (db sqliteDB) MessageToRecipient(recipientID, msgID int64) (*model.MessageRecord, error) {
+func (db DB) MessageToRecipient(recipientID, msgID int64) (*model.MessageRecord, error) {
 	selectSQL := `
 	SELECT id, recipient_id, sender_id, cipher_text, nonce, sent_date FROM messages WHERE recipient_id=? AND id=?`
 	msg := model.MessageRecord{}
@@ -443,7 +481,7 @@ func (db sqliteDB) MessageToRecipient(recipientID, msgID int64) (*model.MessageR
 	return &msg, nil
 }
 
-func (db sqliteDB) ReplaceAPNSToken(old, new string) (rowsAffected int64, err error) {
+func (db DB) ReplaceAPNSToken(old, new string) (rowsAffected int64, err error) {
 	const query = `UPDATE user_apns_tokens SET token=? WHERE token=?`
 	var result sql.Result
 	result, err = db.dbx.Exec(query, new, old)
@@ -457,7 +495,7 @@ func (db sqliteDB) ReplaceAPNSToken(old, new string) (rowsAffected int64, err er
 	return rowsAffected, nil
 }
 
-func (db sqliteDB) ReplaceFCMToken(old, new string) (rowsAffected int64, err error) {
+func (db DB) ReplaceFCMToken(old, new string) (rowsAffected int64, err error) {
 	const query = `UPDATE user_fcm_tokens SET token=? WHERE token=?`
 	var result sql.Result
 	result, err = db.dbx.Exec(query, new, old)
@@ -471,7 +509,7 @@ func (db sqliteDB) ReplaceFCMToken(old, new string) (rowsAffected int64, err err
 	return rowsAffected, nil
 }
 
-func (db sqliteDB) SessionChallenge(userID int64) (*model.SessionChallengeRecord, error) {
+func (db DB) SessionChallenge(userID int64) (*model.SessionChallengeRecord, error) {
 	const challengeSQL = `
 	SELECT id, creation_date, challenge FROM session_challenges WHERE user_id=?`
 	var challenge model.SessionChallengeRecord
@@ -487,10 +525,10 @@ func (db sqliteDB) SessionChallenge(userID int64) (*model.SessionChallengeRecord
 	}
 }
 
-func (db sqliteDB) Ticket(ticket string) (userID, timestamp int64, err error) {
-	err = squirrel.Select("user_id", "timestamp").
+func (db DB) Ticket(ticket string) (userID, timestamp int64, err error) {
+	err = sq.Select("user_id", "timestamp").
 		From(tableTickets).
-		Where(squirrel.Eq{"ticket": ticket}).
+		Where(sq.Eq{"ticket": ticket}).
 		RunWith(db.dbx.DB).
 		QueryRow().
 		Scan(&userID, &timestamp)
@@ -504,19 +542,19 @@ func (db sqliteDB) Ticket(ticket string) (userID, timestamp int64, err error) {
 	}
 }
 
-func (db sqliteDB) UpdateUserIDOfAPNSToken(newUserID int64, token string) error {
+func (db DB) UpdateUserIDOfAPNSToken(newUserID int64, token string) error {
 	const query = `UPDATE user_apns_tokens SET user_id=? WHERE token=?`
 	_, err := db.dbx.Exec(query, newUserID, token)
 	return err
 }
 
-func (db sqliteDB) UpdateUserIDOfFCMToken(newUserID int64, token string) error {
+func (db DB) UpdateUserIDOfFCMToken(newUserID int64, token string) error {
 	const query = `UPDATE user_fcm_tokens SET user_id=? WHERE token=?`
 	_, err := db.dbx.Exec(query, newUserID, token)
 	return err
 }
 
-func (db sqliteDB) User(username string) (*model.UserRecord, error) {
+func (db DB) User(username string) (*model.UserRecord, error) {
 	query := `
 	SELECT 	id,
 			username,
@@ -543,7 +581,7 @@ func (db sqliteDB) User(username string) (*model.UserRecord, error) {
 	}
 }
 
-func (db sqliteDB) Username(userID int64) string {
+func (db DB) Username(userID int64) string {
 	var username sql.NullString
 	err := db.dbx.QueryRow("SELECT username FROM users WHERE id=?", userID).Scan(&username)
 	if err != nil {
@@ -552,7 +590,7 @@ func (db sqliteDB) Username(userID int64) string {
 	return username.String
 }
 
-func (db sqliteDB) UsernameAvailable(username string) (bool, error) {
+func (db DB) UsernameAvailable(username string) (bool, error) {
 	checkUsernameSQL := "SELECT id FROM users WHERE username=?"
 	var foundID int
 	err := db.dbx.QueryRow(checkUsernameSQL, username).Scan(&foundID)
@@ -566,7 +604,7 @@ func (db sqliteDB) UsernameAvailable(username string) (bool, error) {
 	}
 }
 
-func (db sqliteDB) UserPublicKey(userID int64) ([]byte, error) {
+func (db DB) UserPublicKey(userID int64) ([]byte, error) {
 	selectSQL := `SELECT public_key FROM users WHERE id=?`
 	var pubKey []byte
 	err := db.dbx.QueryRow(selectSQL, userID).Scan(&pubKey)
@@ -580,7 +618,7 @@ func (db sqliteDB) UserPublicKey(userID int64) ([]byte, error) {
 	}
 }
 
-func (db sqliteDB) VerifyEmail(email string, userID int64) error {
+func (db DB) VerifyEmail(email string, userID int64) error {
 	tx, err := db.dbx.Begin()
 	if err != nil {
 		return errors.Wrap(err, "unable to start a transaction")

@@ -16,7 +16,7 @@ func TestInt64ToBytesConversion(t *testing.T) {
 }
 
 func BenchmarkStructSerialization(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		v := struct {
 			ID    string `json:"id"`
 			Token string `json:"token"`
@@ -32,7 +32,7 @@ func BenchmarkStructSerialization(b *testing.B) {
 }
 
 func BenchmarkMapSerialization(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		v := map[string]interface{}{
 			"id":    "foo",
 			"token": "abcdefghijklmnopqrstuvwxyz",

@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
-	"zood.dev/oscar/model"
+	"zood.dev/oscar/sqlite"
 )
 
 var apnsClient *apns2.Client
@@ -105,7 +105,7 @@ func (api httpAPI) deleteAPNSToken(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func sendAPNSMessage(db model.Provider, userID int64, payload interface{}) {
+func sendAPNSMessage(db sqlite.DB, userID int64, payload interface{}) {
 	tokens, err := db.APNSTokensRaw(userID)
 	if err != nil {
 		log.Err(err).Msg("db.APNSTokensRaw")

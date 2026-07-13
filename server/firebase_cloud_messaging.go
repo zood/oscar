@@ -8,10 +8,10 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
-	"zood.dev/oscar/model"
+	"zood.dev/oscar/sqlite"
 )
 
-func sendFirebaseMessage(db model.Provider, fbClient *messaging.Client, userID int64, payload map[string]string, urgent bool) {
+func sendFirebaseMessage(db sqlite.DB, fbClient *messaging.Client, userID int64, payload map[string]string, urgent bool) {
 	tokens, err := db.FCMTokensRaw(userID)
 	if err != nil {
 		log.Err(err).Msg("db.FCMTokensRaw")
@@ -48,7 +48,7 @@ func sendFirebaseMessage(db model.Provider, fbClient *messaging.Client, userID i
 	}
 }
 
-func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 
 	body := struct {
@@ -66,15 +66,14 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if we already have this token in the db, and that it's associated with this user
-	db := providersCtx(r.Context()).db
-	ftr, err := db.FCMToken(body.Token)
+	ftr, err := api.db.FCMToken(body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
 	}
 	if ftr == nil {
 		// insert the token, then return
-		err = db.InsertFCMToken(userID, body.Token)
+		err = api.db.InsertFCMToken(userID, body.Token)
 		if err != nil {
 			sendInternalErr(w, err)
 		}
@@ -91,7 +90,7 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.UpdateUserIDOfFCMToken(userID, body.Token)
+	err = api.db.UpdateUserIDOfFCMToken(userID, body.Token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -99,13 +98,12 @@ func addFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, nil)
 }
 
-func deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) deleteFCMTokenHandler(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r.Context())
 
 	token := mux.Vars(r)["token"]
 
-	db := providersCtx(r.Context()).db
-	err := db.DeleteFCMTokenOfUser(userID, token)
+	err := api.db.DeleteFCMTokenOfUser(userID, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return

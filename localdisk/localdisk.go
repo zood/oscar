@@ -3,6 +3,7 @@ package localdisk
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -35,12 +36,23 @@ func New(rootDir string) (filestor.Provider, error) {
 	return localDiskProvider{rootDir: rootDir}, nil
 }
 
+func (ldp localDiskProvider) DeleteFile(relPath string) error {
+	if err := os.Remove(filepath.Join(ldp.rootDir, relPath)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s: %w", relPath, filestor.ErrFileNotExist)
+		}
+		return err
+	}
+
+	return nil
+}
+
 func (ldp localDiskProvider) ReadFile(relPath string, dst io.Writer) error {
 	fp := filepath.Join(ldp.rootDir, relPath)
 	f, err := os.Open(fp)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return filestor.ErrFileNotExist
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s: %w", relPath, filestor.ErrFileNotExist)
 		}
 		return err
 	}
@@ -54,7 +66,7 @@ func (ldp localDiskProvider) WriteFile(relPath string, src io.Reader) error {
 	fp := filepath.Join(ldp.rootDir, relPath)
 	// make sure all the directories in the path exist
 	dir := filepath.Dir(fp)
-	err := os.MkdirAll(dir, 0755)
+	err := os.MkdirAll(dir, 0o755)
 	if err != nil {
 		return err
 	}

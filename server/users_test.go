@@ -13,24 +13,24 @@ import (
 	"zood.dev/oscar/base62"
 	"zood.dev/oscar/boltdb"
 	"zood.dev/oscar/encodable"
+	"zood.dev/oscar/kvstor"
 	"zood.dev/oscar/smtp"
 	"zood.dev/oscar/sodium"
 	"zood.dev/oscar/sqlite"
 )
 
-func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPair sodium.KeyPair) {
+func createTestUser(t *testing.T, db sqlite.DB, kvs kvstor.Provider) (User, sodium.KeyPair) {
 	t.Helper()
 
 	username := strings.ToLower(base62.Rand(8))
-	var err error
-	keyPair, err = sodium.NewKeyPair()
+	keyPair, err := sodium.NewKeyPair()
 	require.NoError(t, err)
 
 	passwordSalt := make([]byte, sodium.PasswordStretchingSaltSize)
 	sodium.Random(passwordSalt)
 	symKey := make([]byte, sodium.SymmetricKeySize)
 	sodium.Random(symKey)
-	user = User{
+	user := User{
 		Email:                       "",
 		PasswordHashAlgorithm:       sodium.Argon2id13.Name,
 		PasswordHashMemoryLimit:     sodium.Argon2id13.MemLimitInteractive,
@@ -43,18 +43,18 @@ func createTestUser(t *testing.T, providers *serverProviders) (user User, keyPai
 		WrappedSymmetricKey:         []byte("wrapped-symmetric-key"),
 		WrappedSymmetricKeyNonce:    []byte("wrapped-symmetric-key-nonce"),
 	}
-	pubID, sErr := createUser(providers.db, providers.kvs, smtp.NewMockSendEmailer(), user)
+	pubID, sErr := createUser(db, kvs, smtp.NewMockSendEmailer(), user)
 	require.Nil(t, sErr)
 
 	user.PublicID = pubID
-	user.ID, err = providers.kvs.UserIDFromPublicID(pubID)
+	user.ID, err = kvs.UserIDFromPublicID(pubID)
 	require.NoError(t, err)
 
-	return
+	return user, keyPair
 }
 
 func TestCreateUserNoEmail(t *testing.T) {
-	db, _ := sqlite.New(sqlite.InMemoryDSN)
+	db := sqlite.NewMockDB(t)
 	kvs := boltdb.Temp(t)
 
 	user := User{Username: "Arash"}
@@ -104,7 +104,7 @@ func TestCreateUserNoEmail(t *testing.T) {
 }
 
 func TestCreateUserWithEmail(t *testing.T) {
-	db, _ := sqlite.New(sqlite.InMemoryDSN)
+	db := sqlite.NewMockDB(t)
 	kvs := boltdb.Temp(t)
 
 	user := User{
@@ -196,4 +196,34 @@ func TestCreateUserHandler(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, uid, int64(1), "invalid user id")
 	require.Equal(t, arash.ID, uid, "ids should match after retrieval")
+}
+
+func TestDeleteUser(t *testing.T) {
+	api := testHTTPAPI(t)
+
+	userA, keyPairA := createTestUser(t, api.db, api.kvs)
+	userB, _ := createTestUser(t, api.db, api.kvs)
+
+	hndlr := newOscarRouter(api)
+
+	srvr := httptest.NewServer(hndlr)
+	defer srvr.Close()
+
+	accessToken := loginTestUser(t, api, userA, keyPairA)
+
+	r := httptest.NewRequest(http.MethodDelete, srvr.URL+"/1/users/me", nil)
+	r.Header.Set("X-Oscar-Access-Token", accessToken)
+	w := httptest.NewRecorder()
+
+	hndlr.ServeHTTP(w, r)
+
+	// make sure user A is gone
+	actualUserA, err := api.db.User(userA.Username)
+	require.NoError(t, err)
+	require.Nil(t, actualUserA)
+
+	// make sure user B is still present
+	actualUserB, err := api.db.User(userB.Username)
+	require.NoError(t, err)
+	require.Equal(t, userB.ID, actualUserB.ID)
 }

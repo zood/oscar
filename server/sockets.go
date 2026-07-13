@@ -174,12 +174,10 @@ func newSocketServer(conn *websocket.Conn, userID int64, kvs kvstor.Provider) so
 	}
 }
 
-func createSocketHandler(w http.ResponseWriter, r *http.Request) {
+func (api httpAPI) createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// check the 'Sec-Websocket-Protocol' header for an access token
 	token := r.Header.Get("Sec-Websocket-Protocol")
-	providers := providersCtx(r.Context())
-	db := providers.db
-	userID, err := verifyAccessToken(db, token)
+	userID, err := verifyAccessToken(api.db, token)
 	if err != nil {
 		sendInternalErr(w, err)
 		return
@@ -188,7 +186,7 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 {
 		// check if they specified a ticket
 		ticket := r.URL.Query().Get("ticket")
-		userID, err = verifySessionTicket(db, ticket)
+		userID, err = verifySessionTicket(api.db, ticket)
 		if err != nil {
 			sendInternalErr(w, err)
 			return
@@ -211,7 +209,6 @@ func createSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kvs := providers.kvs
-	ss := newSocketServer(conn, userID, kvs)
+	ss := newSocketServer(conn, userID, api.kvs)
 	ss.start()
 }
